@@ -3,13 +3,15 @@
 from typing import List, Optional
 from uuid import UUID
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user, require_teacher_or_admin, require_admin
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.exam import (
     ExamCreate, ExamCreateWithQuestions, ExamUpdate, ExamResponse, ExamWithRelations,
     QuestionCreate, QuestionUpdate, QuestionResponse, QuestionWithAnswerKey,
@@ -17,7 +19,7 @@ from backend.app.schemas.exam import (
     GradingRubricCreate, GradingRubricUpdate, GradingRubricResponse,
     ExamCopyCreate, ExamPrintLogCreate, ExamPrintLogResponse,
     SubmissionCreate, SubmissionUpdate, SubmissionResponse, SubmissionWithRelations,
-    SubmissionPageCreate, ExtractedAnswerCreate,
+    SubmissionStudentResponse, SubmissionPageCreate, ExtractedAnswerCreate,
     ExamScoreValidation, QRCodeGenerateRequest,
 )
 from backend.app.services.exam_service import (
@@ -27,6 +29,23 @@ from backend.app.services.exam_service import (
 from backend.app.schemas.common import PaginationParams, PaginatedResponse
 
 router = APIRouter(prefix="/exams", tags=["Provas"])
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _private_pdf_response(file_path: str) -> FileResponse:
+    pdf_directory = (PROJECT_ROOT / "storage" / "exams" / "pdfs").resolve()
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    path = path.resolve()
+    if path.parent != pdf_directory or not path.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
+def _question_response(question, include_answer_key: bool) -> dict:
+    schema = QuestionWithAnswerKey if include_answer_key else QuestionResponse
+    return schema.model_validate(question).model_dump(mode="json")
 
 
 # ==================== Exams ====================
@@ -119,7 +138,7 @@ def list_exams(
     )
 
 
-@router.get("/{exam_id}", response_model=ExamWithRelations)
+@router.get("/{exam_id:uuid}", response_model=ExamWithRelations)
 def get_exam(
     exam_id: UUID,
     current_user: User = Depends(get_current_active_user),
@@ -202,24 +221,30 @@ def create_question(
     return question
 
 
-@router.get("/{exam_id}/questions", response_model=List[QuestionWithAnswerKey])
+@router.get("/{exam_id}/questions", response_model=List[dict])
 def list_questions(
     exam_id: UUID,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     service = QuestionService(db)
-    return service.repo.get_by_exam(exam_id)
+    include_answer_key = current_user.role in {UserRole.TEACHER, UserRole.ADMIN}
+    return [
+        _question_response(question, include_answer_key)
+        for question in service.repo.get_by_exam(exam_id)
+    ]
 
 
-@router.get("/questions/{question_id}", response_model=QuestionWithAnswerKey)
+@router.get("/questions/{question_id}", response_model=dict)
 def get_question(
     question_id: UUID,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     service = QuestionService(db)
-    return service.get(question_id)
+    question = service.get(question_id)
+    include_answer_key = current_user.role in {UserRole.TEACHER, UserRole.ADMIN}
+    return _question_response(question, include_answer_key)
 
 
 @router.patch("/questions/{question_id}", response_model=QuestionResponse)
@@ -331,7 +356,7 @@ def generate_copies(
     return [{"id": str(c.id), "copy_identifier": c.copy_identifier} for c in copies]
 
 
-@router.post("/copies/{copy_id}/pdf-student", response_model=dict)
+@router.post("/copies/{copy_id}/pdf-student")
 def generate_student_pdf(
     copy_id: UUID,
     current_user: User = Depends(require_teacher_or_admin),
@@ -345,10 +370,9 @@ def generate_student_pdf(
     except Exception:
         db.rollback()
         raise
-    return {"pdf_path": pdf_path, "message": "PDF gerado com sucesso"}
+    return _private_pdf_response(pdf_path)
 
-
-@router.post("/versions/{version_id}/pdf-teacher", response_model=dict)
+@router.post("/versions/{version_id}/pdf-teacher")
 def generate_teacher_pdf(
     version_id: UUID,
     current_user: User = Depends(require_teacher_or_admin),
@@ -357,8 +381,7 @@ def generate_teacher_pdf(
     """Gera PDF do gabarito do professor."""
     service = ExamCopyService(db)
     pdf_path = service.generate_pdf_teacher(version_id, current_user.id)
-    return {"pdf_path": pdf_path, "message": "Gabarito PDF gerado com sucesso"}
-
+    return _private_pdf_response(pdf_path)
 
 @router.post("/print-log", response_model=ExamPrintLogResponse)
 def log_print(
@@ -422,7 +445,7 @@ async def create_submission(
     return submission
 
 
-@router.get("/submissions", response_model=PaginatedResponse[SubmissionWithRelations])
+@router.get("/submissions")
 def list_submissions(
     version_id: Optional[UUID] = None,
     student_id: Optional[UUID] = None,
@@ -432,24 +455,54 @@ def list_submissions(
     db: Session = Depends(get_db),
 ):
     service = SubmissionService(db)
-    if version_id:
+    if current_user.role == UserRole.STUDENT:
+        student = current_user.student_profile
+        if student is None:
+            filters = {"student_id": UUID(int=0)}
+        else:
+            filters = {"student_id": student.id}
+        if version_id:
+            filters["version_id"] = version_id
+        if status:
+            from backend.app.models.exam import SubmissionStatus
+            filters["status"] = SubmissionStatus(status)
+        submissions = service.repo.get_all(
+            skip=params.offset,
+            limit=params.limit,
+            filters=filters,
+            order_by="submitted_at",
+            order_desc=True,
+        )
+        total = service.repo.count(filters=filters)
+        items = [
+            SubmissionStudentResponse.model_validate(submission).model_dump(mode="json")
+            for submission in submissions
+        ]
+    elif version_id:
         submissions = service.repo.get_by_version(version_id)
+        total = len(submissions)
+        items = submissions
     elif student_id:
         submissions = service.repo.get_by_student(student_id)
+        total = len(submissions)
+        items = submissions
     elif status:
         from backend.app.models.exam import SubmissionStatus
         submissions = service.repo.get_all(filters={"status": SubmissionStatus(status)})
+        total = len(submissions)
+        items = submissions
     else:
         submissions = service.repo.get_all(skip=params.offset, limit=params.limit)
-    total = len(submissions)
+        total = len(submissions)
+        items = submissions
     return PaginatedResponse(
-        items=submissions, total=total, page=params.page, page_size=params.page_size,
+        items=items, total=total, page=params.page, page_size=params.page_size,
         total_pages=(total + params.page_size - 1) // params.page_size,
         has_next=params.page * params.page_size < total, has_prev=params.page > 1,
     )
 
 
-@router.get("/submissions/{submission_id}", response_model=SubmissionWithRelations)
+@router.get("/submissions/{submission_id}")
 def get_submission(
     submission_id: UUID,
     current_user: User = Depends(get_current_active_user),
@@ -457,8 +510,16 @@ def get_submission(
 ):
     service = SubmissionService(db)
     submission = service.repo.get_with_pages(submission_id)
-    if not submission:
+    if not submission or (
+        current_user.role == UserRole.STUDENT
+        and (
+            current_user.student_profile is None
+            or submission.student_id != current_user.student_profile.id
+        )
+    ):
         raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    if current_user.role == UserRole.STUDENT:
+        return SubmissionStudentResponse.model_validate(submission).model_dump(mode="json")
     return submission
 
 

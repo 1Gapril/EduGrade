@@ -20,7 +20,7 @@ Tesseract e Poppler são opcionais. O sistema funciona sem eles; apenas as funci
 
 📥 Passo 1 — Clonar o Repositório
 cmd
-git clone https://github.com/SEU_USUARIO/EduGrade.git
+git clone https://github.com/1Gapril/EduGrade.git
 cd EduGrade
 
 Se você já tem o projeto na máquina, apenas navegue até a pasta:
@@ -123,18 +123,12 @@ http://localhost:8000/redoc
 	Documentação alternativa (ReDoc)
 http://localhost:8000/health
 	Status do servidor (JSON)
-👤 Passo 9 — Usuários de Demonstração
+👤 Passo 9 — Contas de desenvolvimento
 
-Na primeira inicialização, o sistema cria automaticamente três usuários para teste:
-
-Perfil	Usuário	Senha	Acesso
-🔑 Administrador	admin	admin123	Acesso total ao sistema
-👨‍🏫 Professor	professor	prof123	Gerenciamento de turmas e avaliações
-🎓 Aluno	aluno	aluno123	Visualização de notas e frequência
-
-CAUTION
-
-Estes usuários são apenas para desenvolvimento e testes. Em produção, altere as senhas imediatamente após o primeiro acesso.
+O seed atual cria contas e registros demonstrativos no banco configurado.
+Use-o somente em um banco descartável de desenvolvimento/teste; não considere
+essas contas credenciais administrativas próprias e nunca use o seed em um
+banco com dados reais.
 
 🛑 Passo 10 — Parar o Servidor
 
@@ -155,13 +149,15 @@ Se precisar recriar os dados de demonstração:
 
 cmd
 python scripts\seed_db.py
-Resetar o banco de dados
-
-Para começar com um banco limpo (apaga todos os dados!):
+Criar um banco isolado para testes
 
 cmd
-del backend\edugrade.db
-python scripts\seed_db.py
+$env:DATABASE_URL = "sqlite:///./DADO_DE_TESTE_EDUGRADE.db"
+venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8001
+
+Não remova nem recrie o banco configurado para a aplicação: isso pode apagar
+dados acadêmicos existentes. O nome acima identifica um banco exclusivamente
+de teste.
 Executar migrações com Alembic
 cmd
 cd backend
@@ -214,10 +210,10 @@ Causa: O banco existente foi criado antes do seed automático.
 Solução:
 
 cmd
-del backend\edugrade.db
 python -m uvicorn backend.app.main:app --reload
 
-O seed é executado automaticamente na primeira inicialização com banco vazio.
+Antes de iniciar, confirme `DATABASE_URL`. Não apague o banco para tentar
+recriar usuários; preserve os dados e investigue o seed/migração.
 
 📁 Estrutura do Projeto
 EduGrade\

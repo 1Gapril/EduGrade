@@ -6,6 +6,47 @@
   <title>Portal do Professor - EduGrade</title>
   <link rel="stylesheet" href="../css/main.css">
   <style>
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+    .stat-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .stat-icon {
+      display: flex;
+      flex: 0 0 42px;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-md);
+      color: var(--color-white);
+    }
+    .stat-icon.primary { background: var(--color-primary); }
+    .stat-icon.info { background: var(--color-info); }
+    .stat-icon.success { background: var(--color-success); }
+    .stat-icon.warning { background: var(--color-warning); }
+    .stat-content { min-width: 0; }
+    .stat-value {
+      color: var(--color-gray-900);
+      font-size: 1.375rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .stat-label {
+      margin-top: var(--space-1);
+      color: var(--color-gray-500);
+      font-size: 0.75rem;
+    }
     .teacher-header {
       display: flex;
       align-items: center;
@@ -57,6 +98,38 @@
     .exam-status.published { background: var(--color-primary-light); color: var(--color-primary); }
     .exam-status.grading { background: var(--color-warning-light); color: var(--color-warning); }
     .exam-status.completed { background: var(--color-success-light); color: var(--color-success); }
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+    .quick-action-btn {
+      flex: 1;
+      min-width: 160px;
+      padding: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      background: var(--color-white);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-2);
+      text-align: center;
+      transition: all var(--transition-fast);
+    }
+    .quick-action-btn:hover {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    .quick-action-btn [data-feather] {
+      width: 28px;
+      height: 28px;
+    }
+    .quick-action-btn span {
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -173,14 +246,15 @@
           <div class="info">
             <div class="count" id="pending-count">0</div>
             <div class="text">
-              <h3>Correções Pendentes de Revisão</h3>
-              <p>Provas corrigidas pela IA aguardando sua aprovação</p>
+              <h3>Revisões Pendentes</h3>
+              <p>Itens aguardando análise na fila geral da API</p>
             </div>
           </div>
           <a href="/professor/corrections.html" class="btn btn-warning"><span data-feather="check-circle"></span> Revisar Agora</a>
         </div>
 
         <!-- Stats -->
+        <p class="text-muted" role="status">A API não fornece indicadores individuais de turmas e provas; a contagem de revisões representa a fila geral.</p>
         <div class="stats-grid" id="stats-grid"></div>
 
         <!-- My Classes -->
@@ -300,10 +374,10 @@
       try {
         const profile = await api.getProfile();
         renderTeacherHeader(profile);
-        renderStats();
+        const pendingCount = await loadPendingCorrections();
+        renderStats(pendingCount);
         await loadMyClasses();
         await loadMyExams();
-        await loadPendingCorrections();
         await loadTeacherMaterials();
       } catch (error) {
         UI.showError('Erro ao carregar dados do professor');
@@ -311,26 +385,26 @@
     }
 
     function renderTeacherHeader(profile) {
-      document.getElementById('teacher-name').textContent = profile.name || profile.username;
-      document.getElementById('teacher-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
-      document.getElementById('teacher-registration').textContent = profile.registration || 'Não informado';
-      document.getElementById('teacher-subjects').textContent = profile.subjects?.length || '0';
-      document.getElementById('teacher-classes').textContent = profile.classes?.length || '0';
+      const name = profile.full_name || profile.name || profile.username || 'Professor';
+      document.getElementById('teacher-name').textContent = name;
+      document.getElementById('teacher-registration').textContent = profile.registration || 'Não disponível';
+      document.getElementById('teacher-subjects').textContent = 'Não disponível';
+      document.getElementById('teacher-classes').textContent = 'Não disponível';
     }
 
-    function renderStats() {
+    function renderStats(pendingCount) {
       const stats = [
-        { label: 'Turmas Ativas', value: '4', icon: 'users', color: 'primary' },
-        { label: 'Provas Este Mês', value: '3', icon: 'file-text', color: 'info' },
-        { label: 'Pendentes Revisão', value: '7', icon: 'alert-triangle', color: 'warning' },
-        { label: 'Alunos Totais', value: '128', icon: 'user', color: 'success' },
+        { label: 'Turmas Ativas', icon: 'users', color: 'primary' },
+        { label: 'Provas Este Mês', icon: 'file-text', color: 'info' },
+        { label: 'Revisões Pendentes (fila geral)', value: pendingCount === null ? '—' : String(pendingCount), icon: 'alert-triangle', color: 'warning' },
+        { label: 'Alunos Totais', icon: 'user', color: 'success' },
       ];
 
       document.getElementById('stats-grid').innerHTML = stats.map(s => `
         <div class="stat-card">
           <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
           <div class="stat-content">
-            <div class="stat-value">${s.value}</div>
+            <div class="stat-value">${s.value === undefined ? '—' : s.value}</div>
             <div class="stat-label">${s.label}</div>
           </div>
         </div>
@@ -339,87 +413,28 @@
     }
 
     async function loadMyClasses() {
-      // Mock data
-      const classes = [
-        { id: '1', name: 'Turma A - 2026/2', subject: 'Cálculo I', students: 32, schedule: 'Seg/Qua 14:00-16:00', room: 'Sala 101' },
-        { id: '2', name: 'Turma B - 2026/2', subject: 'Cálculo I', students: 28, schedule: 'Ter/Qui 10:00-12:00', room: 'Sala 102' },
-        { id: '3', name: 'Turma A - 2026/2', subject: 'Física II', students: 25, schedule: 'Seg/Qua 16:00-18:00', room: 'Lab 2' },
-        { id: '4', name: 'Turma C - 2026/2', subject: 'Programação', students: 30, schedule: 'Sex 08:00-12:00', room: 'Lab 1' },
-      ];
-
       document.getElementById('my-classes-section').style.display = 'block';
-      document.getElementById('my-classes-list').innerHTML = classes.map(c => `
-        <div class="class-card">
-          <div class="class-card-header">
-            <div>
-              <div class="class-card-title">${UI.escapeHtml(c.name)}</div>
-              <div class="class-card-subject">${UI.escapeHtml(c.subject)}</div>
-            </div>
-          </div>
-          <div class="class-card-body">
-            <div class="class-card-meta">
-              <span><span data-feather="users"></span> ${c.students} alunos</span>
-              <span><span data-feather="calendar"></span> ${UI.escapeHtml(c.schedule)}</span>
-              <span><span data-feather="map-pin"></span> ${UI.escapeHtml(c.room)}</span>
-            </div>
-            <div class="class-card-actions">
-              <a href="/professor/class-detail.html?id=${c.id}" class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Ver Turma</a>
-              <a href="/professor/grades.html?class=${c.id}" class="btn btn-primary btn-sm"><span data-feather="edit"></span> Lançar Notas</a>
-              <a href="/correcao-lote.html?class=${c.id}" class="btn btn-success btn-sm"><span data-feather="upload"></span> Correção Lote</a>
-            </div>
-          </div>
-        </div>
-      `).join('');
-      feather.replace();
+      document.getElementById('my-classes-list').textContent =
+        'A API não disponibiliza o identificador do perfil docente necessário para filtrar as turmas deste professor.';
     }
 
     async function loadMyExams() {
-      // Mock data
-      const exams = [
-        { id: '1', subject: 'Cálculo I', title: 'Prova 1 - Limites e Derivadas', date: '2026-11-15', status: 'published', submissions: 58, graded: 45 },
-        { id: '2', subject: 'Física II', title: 'Prova 2 - Eletromagnetismo', date: '2026-11-20', status: 'draft', submissions: 0, graded: 0 },
-        { id: '3', subject: 'Programação', title: 'Projeto Final', date: '2026-11-25', status: 'grading', submissions: 28, graded: 12 },
-        { id: '4', subject: 'Álgebra Linear', title: 'Prova 1 - Matrizes', date: '2026-10-10', status: 'completed', submissions: 30, graded: 30 },
-      ];
-
       document.getElementById('my-exams-section').style.display = 'block';
-      document.getElementById('my-exams-list').innerHTML = exams.map(e => `
-        <div class="exam-card">
-          <div class="exam-card-header">
-            <div style="flex: 1;">
-              <div class="exam-card-title">${UI.escapeHtml(e.subject)}: ${UI.escapeHtml(e.title)}</div>
-              <div class="exam-card-meta">
-                <span><span data-feather="calendar"></span> ${UI.formatDate(e.date)}</span>
-                <span><span data-feather="users"></span> ${e.submissions} submissões</span>
-                <span><span data-feather="check-circle"></span> ${e.graded} corrigidas</span>
-              </div>
-            </div>
-            <span class="exam-status ${e.status}">${getStatusLabel(e.status)}</span>
-          </div>
-          <div class="exam-card-body">
-            <div class="exam-card-actions">
-              <a href="/exams/detail.html?id=${e.id}" class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Detalhes</a>
-              ${e.status === 'published' || e.status === 'grading' ? `<a href="/professor/corrections.html?exam=${e.id}" class="btn btn-primary btn-sm"><span data-feather="check-circle"></span> Corrigir</a>` : ''}
-              ${e.status === 'draft' ? `<a href="/exams/edit.html?id=${e.id}" class="btn btn-primary btn-sm"><span data-feather="edit"></span> Editar</a>` : ''}
-              <a href="/exams/print.html?exam=${e.id}" class="btn btn-ghost btn-sm"><span data-feather="printer"></span> Imprimir</a>
-            </div>
-          </div>
-        </div>
-      `).join('');
-      feather.replace();
-    }
-
-    function getStatusLabel(status) {
-      const labels = { draft: 'Rascunho', published: 'Publicada', grading: 'Em Correção', completed: 'Concluída' };
-      return labels[status] || status;
+      document.getElementById('my-exams-list').textContent =
+        'A API não disponibiliza uma listagem de provas filtrada pelo professor autenticado.';
     }
 
     async function loadPendingCorrections() {
-      // Mock - replace with real API
-      const pendingCount = 7;
-      if (pendingCount > 0) {
-        document.getElementById('pending-banner').style.display = 'flex';
-        document.getElementById('pending-count').textContent = pendingCount;
+      try {
+        const reviews = await api.request('/ai/reviews/pending');
+        const count = Array.isArray(reviews) ? reviews.length : null;
+        if (count > 0) {
+          document.getElementById('pending-banner').style.display = 'flex';
+          document.getElementById('pending-count').textContent = String(count);
+        }
+        return count;
+      } catch {
+        return null;
       }
     }
 
@@ -434,6 +449,7 @@
           api.request('/materials/teacher/subjects'),
           api.request('/materials/teacher'),
         ]);
+        document.getElementById('teacher-subjects').textContent = String(subjects.length);
         subjectSelect.replaceChildren();
         if (!subjects.length) {
           teacherCanPublishMaterials = false;
@@ -462,6 +478,7 @@
         renderTeacherMaterials(materials);
       } catch (error) {
         teacherCanPublishMaterials = false;
+        document.getElementById('teacher-subjects').textContent = 'Não disponível';
         message.textContent = error.message || 'Não foi possível carregar as disciplinas e materiais.';
         list.textContent = 'Tente atualizar o painel mais tarde.';
         publishButton.disabled = true;

@@ -21,9 +21,10 @@ EduGrade também restringe a URL configurada a loopback, não segue redireções
 não usa proxy de ambiente para essa comunicação. Não configure um endereço
 remoto para essa API.
 
-O endereço é configurado em **Configurações → FCC / Free Claude Code**. O valor
-inicial `http://127.0.0.1:8082` é apenas a configuração local observada e pode
-ser alterado se o serviço mudar de porta.
+O endereço é configurado em **Configurações → FCC / Free Claude Code**. Informe
+somente a origem, por exemplo `http://127.0.0.1:8082`, sem `/admin`; o EduGrade
+anexa `/admin/api/...` automaticamente. O valor inicial é a configuração local
+observada e pode ser alterado se o serviço mudar de porta.
 
 O status apresenta somente campos não secretos: processo, provedor/modelo
 principais, estados de provedores, estado do serviço Code e modelos do catálogo.

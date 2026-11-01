@@ -42,6 +42,7 @@
     .status-dot.online { background: var(--color-success); }
     .status-dot.warning { background: var(--color-warning); }
     .status-dot.offline { background: var(--color-danger); }
+    .status-dot.unavailable { background: var(--color-gray-400); }
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -228,21 +229,14 @@
           </div>
           <div class="system-status" id="system-status">
             <div class="status-item">
-              <span class="status-dot online" id="db-status"></span>
-              <span>Banco de Dados</span>
-            </div>
-            <div class="status-item">
-              <span class="status-dot online" id="ai-status"></span>
-              <span>Serviço IA</span>
-            </div>
-            <div class="status-item">
-              <span class="status-dot online" id="storage-status"></span>
-              <span>Armazenamento</span>
+              <span class="status-dot unavailable" id="app-status"></span>
+              <span id="app-status-label" title="O endpoint /health informa apenas o estado declarado pela aplicação.">API: não verificada</span>
             </div>
           </div>
         </div>
 
         <!-- Stats -->
+        <p class="text-muted" role="status">Indicadores agregados não estão disponíveis pela API.</p>
         <div class="stats-grid" id="stats-grid"></div>
 
         <!-- Main Grid -->
@@ -256,19 +250,19 @@
             <div class="admin-section-body">
               <a href="/admin/users.html?role=student" class="admin-link">
                 <span><span data-feather="graduation-cap"></span> Alunos</span>
-                <span class="badge badge-status info" id="count-students">0</span>
+                <span class="badge badge-status info" id="count-students" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/users.html?role=teacher" class="admin-link">
                 <span><span data-feather="user"></span> Professores</span>
-                <span class="badge badge-status primary" id="count-teachers">0</span>
+                <span class="badge badge-status primary" id="count-teachers" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/users.html?role=admin" class="admin-link">
                 <span><span data-feather="shield"></span> Administradores</span>
-                <span class="badge badge-status danger" id="count-admins">0</span>
+                <span class="badge badge-status danger" id="count-admins" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/users.html?status=pending" class="admin-link">
                 <span><span data-feather="clock"></span> Pendentes de Aprovação</span>
-                <span class="badge badge-status warning" id="count-pending">0</span>
+                <span class="badge badge-status warning" id="count-pending" title="Contagem não disponível pela API">—</span>
               </a>
             </div>
           </div>
@@ -282,19 +276,19 @@
             <div class="admin-section-body">
               <a href="/admin/academic.html#courses" class="admin-link">
                 <span><span data-feather="award"></span> Cursos</span>
-                <span class="badge badge-status gray" id="count-courses">0</span>
+                <span class="badge badge-status gray" id="count-courses" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/academic.html#subjects" class="admin-link">
                 <span><span data-feather="book"></span> Disciplinas</span>
-                <span class="badge badge-status gray" id="count-subjects">0</span>
+                <span class="badge badge-status gray" id="count-subjects" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/classes.html" class="admin-link">
                 <span><span data-feather="users"></span> Turmas</span>
-                <span class="badge badge-status gray" id="count-classes">0</span>
+                <span class="badge badge-status gray" id="count-classes" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/admin/periods.html" class="admin-link">
                 <span><span data-feather="calendar"></span> Períodos Letivos</span>
-                <span class="badge badge-status gray" id="count-periods">0</span>
+                <span class="badge badge-status gray" id="count-periods" title="Contagem não disponível pela API">—</span>
               </a>
             </div>
           </div>
@@ -308,19 +302,19 @@
             <div class="admin-section-body">
               <a href="/exams/list.html" class="admin-link">
                 <span><span data-feather="file-text"></span> Banco de Provas</span>
-                <span class="badge badge-status gray" id="count-exams">0</span>
+                <span class="badge badge-status gray" id="count-exams" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/ai/corrections.html" class="admin-link">
                 <span><span data-feather="check-circle"></span> Correções por IA</span>
-                <span class="badge badge-status gray" id="count-corrections">0</span>
+                <span class="badge badge-status gray" id="count-corrections" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/correcao-lote.html" class="admin-link">
                 <span><span data-feather="upload"></span> Lotes de Correção</span>
-                <span class="badge badge-status gray" id="count-batches">0</span>
+                <span class="badge badge-status gray" id="count-batches" title="Contagem não disponível pela API">—</span>
               </a>
               <a href="/ai/review.html" class="admin-link">
                 <span><span data-feather="alert-triangle"></span> Pendentes de Revisão</span>
-                <span class="badge badge-status warning" id="count-pending-review">0</span>
+                <span class="badge badge-status warning" id="count-pending-review" title="Contagem não disponível pela API">—</span>
               </a>
             </div>
           </div>
@@ -340,7 +334,7 @@
           <!-- Recent Users -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h2 class="admin-section-title"><span data-feather="user-plus"></span> Últimos Usuários Cadastrados</h2>
+              <h2 class="admin-section-title"><span data-feather="user-plus"></span> Usuários retornados pela API</h2>
               <a href="/admin/users.html" class="btn btn-ghost btn-sm">Ver todos</a>
             </div>
             <div class="admin-section-body">
@@ -438,31 +432,29 @@
     async function loadAdminData() {
       try {
         const profile = await api.getProfile();
-        document.getElementById('admin-name').textContent = profile.name || profile.username;
-        document.getElementById('user-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
-
-        renderStats();
-        await loadSystemStatus();
-        await loadRecentUsers();
-        await loadRecentAudit();
+        const name = profile.full_name || profile.name || profile.username || 'Administrador';
+        document.getElementById('admin-name').textContent = name;
+        document.getElementById('user-avatar').textContent = name[0].toUpperCase();
       } catch (error) {
-        UI.showError('Erro ao carregar dados administrativos');
+        UI.showError(error.message || 'Não foi possível carregar o perfil administrativo.');
       }
+      renderStats();
+      await Promise.all([loadSystemStatus(), loadRecentUsers(), loadRecentAudit()]);
     }
 
     function renderStats() {
       const stats = [
-        { label: 'Total de Usuários', value: '1.234', icon: 'users', color: 'primary' },
-        { label: 'Provas Cadastradas', value: '89', icon: 'file-text', color: 'info' },
-        { label: 'Correções IA (mês)', value: '2.456', icon: 'check-circle', color: 'success' },
-        { label: 'Lotes Processados', value: '23', icon: 'upload', color: 'warning' },
+        { label: 'Total de Usuários', icon: 'users', color: 'primary' },
+        { label: 'Provas Cadastradas', icon: 'file-text', color: 'info' },
+        { label: 'Correções IA (mês)', icon: 'check-circle', color: 'success' },
+        { label: 'Lotes Processados', icon: 'upload', color: 'warning' },
       ];
 
       document.getElementById('stats-grid').innerHTML = stats.map(s => `
         <div class="stat-card">
           <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
           <div class="stat-content">
-            <div class="stat-value">${s.value}</div>
+            <div class="stat-value">—</div>
             <div class="stat-label">${s.label}</div>
           </div>
         </div>
@@ -471,68 +463,66 @@
     }
 
     async function loadSystemStatus() {
-      // Mock - replace with real health checks
-      document.getElementById('system-metrics').innerHTML = `
-        <div class="metric-item">
-          <span class="metric-label">Uptime</span>
-          <span class="metric-value">99.9%</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Req/min</span>
-          <span class="metric-value">142</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Tempo Médio</span>
-          <span class="metric-value">145ms</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Erro Rate</span>
-          <span class="metric-value">0.02%</span>
-        </div>
-      `;
+      const metrics = document.getElementById('system-metrics');
+      metrics.textContent = 'Métricas de desempenho (uptime, requisições e latência) não são disponibilizadas pela API.';
+      const dot = document.getElementById('app-status');
+      const label = document.getElementById('app-status-label');
+      try {
+        const health = await api.request('/health');
+        const healthy = health.status === 'healthy';
+        dot.className = `status-dot ${healthy ? 'online' : 'warning'}`;
+        label.textContent = `API: ${healthy ? 'respondeu' : 'resposta sem estado saudável'}`;
+      } catch {
+        dot.className = 'status-dot unavailable';
+        label.textContent = 'API: sem resposta';
+      }
     }
 
     async function loadRecentUsers() {
-      // Mock data
-      const users = [
-        { name: 'João Silva', email: 'joao@email.com', role: 'student', status: 'active', created: '2026-11-10' },
-        { name: 'Maria Santos', email: 'maria@email.com', role: 'student', status: 'active', created: '2026-11-09' },
-        { name: 'Prof. Carlos', email: 'carlos@email.com', role: 'teacher', status: 'active', created: '2026-11-08' },
-        { name: 'Ana Costa', email: 'ana@email.com', role: 'student', status: 'pending', created: '2026-11-07' },
-        { name: 'Admin Novo', email: 'novo@admin.com', role: 'admin', status: 'active', created: '2026-11-05' },
-      ];
-
-      document.getElementById('recent-users-body').innerHTML = users.map(u => `
-        <tr>
-          <td>${UI.escapeHtml(u.name)}</td>
-          <td>${UI.escapeHtml(u.email)}</td>
-          <td style="text-align: center;"><span class="role-badge ${u.role}">${u.role}</span></td>
-          <td style="text-align: center;"><span class="status-badge ${u.status}">${u.status === 'active' ? 'Ativo' : 'Pendente'}</span></td>
-          <td>${UI.formatDate(u.created)}</td>
-        </tr>
-      `).join('');
+      const body = document.getElementById('recent-users-body');
+      try {
+        const result = await api.request('/users?page=1&page_size=5');
+        const users = Array.isArray(result.items) ? result.items : [];
+        if (!users.length) {
+          body.innerHTML = '<tr><td colspan="5">Nenhum usuário retornado.</td></tr>';
+          return;
+        }
+        body.innerHTML = users.map(user => `
+          <tr>
+            <td>${UI.escapeHtml(user.full_name || user.username || 'Nome indisponível')}</td>
+            <td>${UI.escapeHtml(user.email || 'Email indisponível')}</td>
+            <td style="text-align: center;"><span class="role-badge ${UI.escapeHtml(user.role || '')}">${UI.escapeHtml(user.role || 'Indisponível')}</span></td>
+            <td style="text-align: center;"><span class="status-badge ${user.is_active ? 'active' : 'inactive'}">${user.is_active ? 'Ativo' : 'Inativo'}</span></td>
+            <td>${user.created_at ? UI.formatDate(user.created_at) : 'Data indisponível'}</td>
+          </tr>
+        `).join('');
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="5">${UI.escapeHtml(error.message || 'Não foi possível carregar usuários.')}</td></tr>`;
+      }
     }
 
     async function loadRecentAudit() {
-      // Mock data
-      const audits = [
-        { action: 'CREATE_USER', entity: 'User', description: 'Novo aluno cadastrado: João Silva', user: 'admin', time: '2 min atrás' },
-        { action: 'EXAM_PUBLISHED', entity: 'Exam', description: 'Prova "Cálculo I - P1" publicada', user: 'prof.carlos', time: '15 min atrás' },
-        { action: 'BATCH_COMPLETED', entity: 'GradingBatch', description: 'Lote #1234 finalizado - 45 provas corrigidas', user: 'system', time: '1 hora atrás' },
-        { action: 'CORRECTION_REVIEWED', entity: 'CorrectionReview', description: 'Correção aprovada para aluno Maria Santos', user: 'prof.carlos', time: '2 horas atrás' },
-        { action: 'SETTINGS_UPDATED', entity: 'SystemConfig', description: 'Configuração de IA atualizada', user: 'admin', time: '3 horas atrás' },
-      ];
-
-      document.getElementById('recent-audit').innerHTML = audits.map(a => `
-        <div class="activity-item">
-          <div class="activity-icon primary" data-feather="activity"></div>
-          <div class="activity-content">
-            <div class="activity-title">${UI.escapeHtml(a.description)}</div>
-            <div class="activity-meta">${a.action} • ${UI.escapeHtml(a.user)} • ${a.time}</div>
+      const container = document.getElementById('recent-audit');
+      try {
+        const result = await api.request('/audit/recent?hours=24&page=1&page_size=5');
+        const audits = Array.isArray(result.items) ? result.items : [];
+        if (!audits.length) {
+          container.textContent = 'Nenhuma atividade registrada no período consultado.';
+          return;
+        }
+        container.innerHTML = audits.map(audit => `
+          <div class="activity-item">
+            <div class="activity-icon primary" data-feather="activity"></div>
+            <div class="activity-content">
+              <div class="activity-title">${UI.escapeHtml(audit.description || 'Descrição indisponível')}</div>
+              <div class="activity-meta">${UI.escapeHtml(audit.action || 'Ação indisponível')} • ${UI.escapeHtml(audit.user_id || 'Usuário indisponível')} • ${audit.created_at ? UI.formatDateTime(audit.created_at) : 'Data indisponível'}</div>
+            </div>
           </div>
-        </div>
-      `).join('');
-      feather.replace();
+        `).join('');
+        feather.replace();
+      } catch (error) {
+        container.textContent = error.message || 'Não foi possível carregar a auditoria.';
+      }
     }
   </script>
 </body>

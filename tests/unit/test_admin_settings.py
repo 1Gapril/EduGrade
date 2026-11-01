@@ -183,3 +183,19 @@ def test_custom_provider_rejects_private_ip_endpoints():
         )
 
     assert getattr(error.value, "status_code", None) == 422
+
+
+def test_fcc_url_normalizes_admin_root_and_rejects_other_paths():
+    assert (
+        admin_settings_service._validate_fcc_url("http://127.0.0.1:8082/admin/")
+        == "http://127.0.0.1:8082"
+    )
+    assert (
+        admin_settings_service._validate_fcc_url("http://127.0.0.1:8082/")
+        == "http://127.0.0.1:8082"
+    )
+
+    with pytest.raises(Exception) as error:
+        admin_settings_service._validate_fcc_url("http://127.0.0.1:8082/admin/api")
+
+    assert getattr(error.value, "status_code", None) == 422

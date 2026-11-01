@@ -4,7 +4,7 @@ import ipaddress
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
@@ -583,7 +583,13 @@ class AdminSettingsService:
         except httpx.TimeoutException:
             error = "Tempo limite excedido ao consultar a API administrativa do FCC."
         except httpx.HTTPStatusError as exc:
-            error = f"API administrativa do FCC respondeu HTTP {exc.response.status_code}."
+            if exc.response.status_code == 405:
+                error = (
+                    "O FCC respondeu HTTP 405; informe somente a origem local "
+                    "(por exemplo, http://127.0.0.1:8082), sem /admin."
+                )
+            else:
+                error = f"API administrativa do FCC respondeu HTTP {exc.response.status_code}."
         except (httpx.RequestError, ValueError):
             error = "Não foi possível consultar a API administrativa do FCC."
         return {
@@ -807,7 +813,13 @@ def _validate_fcc_url(raw_url: str) -> str:
             status_code=422,
             detail="Por segurança, a API administrativa FCC só pode ser acessada em localhost.",
         )
-    return value
+    path = parsed.path.rstrip("/")
+    if path not in {"", "/admin"}:
+        raise HTTPException(
+        status_code=422,
+        detail="Informe apenas a origem local do FCC, sem caminhos adicionais.",
+        )
+    return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
 def apply_persisted_runtime_settings(db: Session) -> None:

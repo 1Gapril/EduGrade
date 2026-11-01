@@ -351,6 +351,16 @@ class SubmissionWithRelations(SubmissionResponse):
     ai_corrections: List["AICorrectionResponse"] = []
 
 
+class SubmissionStudentResponse(BaseModel):
+    """Visão limitada da própria submissão para estudantes."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: str
+    submitted_at: datetime
+    processed_at: Optional[datetime] = None
+
+
 # ==================== Submission Page Schemas ====================
 
 class SubmissionPageBase(BaseModel):
