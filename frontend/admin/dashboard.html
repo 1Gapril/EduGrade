@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Administrativo - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .admin-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      padding: var(--space-6);
+      background: linear-gradient(135deg, var(--color-info-light) 0%, var(--color-white) 100%);
+      border-radius: var(--radius-xl);
+      margin-bottom: var(--space-6);
+    }
+    .admin-info h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-gray-900); }
+    .admin-info p { color: var(--color-gray-600); margin-top: var(--space-1); }
+    .system-status {
+      display: flex;
+      gap: var(--space-4);
+      flex-wrap: wrap;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-white);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-gray-200);
+      font-size: 0.875rem;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: var(--radius-full);
+    }
+    .status-dot.online { background: var(--color-success); }
+    .status-dot.warning { background: var(--color-warning); }
+    .status-dot.offline { background: var(--color-danger); }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+    .stat-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .stat-icon {
+      display: flex;
+      flex: 0 0 42px;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-md);
+      color: var(--color-white);
+    }
+    .stat-icon.primary { background: var(--color-primary); }
+    .stat-icon.info { background: var(--color-info); }
+    .stat-icon.success { background: var(--color-success); }
+    .stat-icon.warning { background: var(--color-warning); }
+    .stat-content { min-width: 0; }
+    .stat-value {
+      color: var(--color-gray-900);
+      font-size: 1.375rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .stat-label {
+      margin-top: var(--space-1);
+      color: var(--color-gray-500);
+      font-size: 0.75rem;
+    }
+    .admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: var(--space-6);
+    }
+    @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
+    .admin-section { background: var(--color-white); border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); overflow: hidden; }
+    .admin-section-header { padding: var(--space-4) var(--space-5); background: var(--color-gray-50); border-bottom: 1px solid var(--color-gray-200); display: flex; align-items: center; justify-content: space-between; }
+    .admin-section-title { font-weight: 600; color: var(--color-gray-900); display: flex; align-items: center; gap: var(--space-2); }
+    .admin-section-body { padding: var(--space-4); }
+    .admin-link { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3); border-radius: var(--radius-md); color: var(--color-gray-700); transition: all var(--transition-fast); text-decoration: none; }
+    .admin-link:hover { background: var(--color-gray-50); color: var(--color-primary); }
+    .admin-link i { width: 20px; height: 20px; color: var(--color-gray-400); }
+    .admin-link:hover i { color: var(--color-primary); }
+    .admin-link .badge { font-size: 0.625rem; padding: 2px 6px; }
+    .user-table th:nth-child(4), .user-table td:nth-child(4) { text-align: center; }
+    .role-badge { padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 500; }
+    .role-badge.admin { background: var(--color-danger-light); color: var(--color-danger); }
+    .role-badge.teacher { background: var(--color-primary-light); color: var(--color-primary); }
+    .role-badge.student { background: var(--color-success-light); color: var(--color-success); }
+    .status-badge { padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 500; }
+    .status-badge.active { background: var(--color-success-light); color: var(--color-success); }
+    .status-badge.inactive { background: var(--color-gray-100); color: var(--color-gray-600); }
+    .status-badge.pending { background: var(--color-warning-light); color: var(--color-warning); }
+    .system-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+    @media (max-width: 480px) { .system-metrics { grid-template-columns: 1fr; } }
+    .metric-item { display: flex; flex-direction: column; gap: var(--space-1); }
+    .metric-label { font-size: 0.75rem; color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-value { font-size: 1.25rem; font-weight: 700; color: var(--color-gray-900); }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" data-feather="graduation-cap"></div>
+        <span class="sidebar-title">EduGrade</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Administração</div>
+          <a href="/admin/dashboard.html" class="nav-item active" data-href="/admin/dashboard.html">
+            <span data-feather="home"></span>
+            <span class="nav-item-text">Dashboard</span>
+          </a>
+          <a href="/admin/users.html" class="nav-item" data-href="/admin/users.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Usuários</span>
+          </a>
+          <a href="/admin/access-requests.html" class="nav-item" data-href="/admin/access-requests.html">
+            <span data-feather="bell"></span>
+            <span class="nav-item-text">Chamados de acesso</span>
+            <span class="badge" id="access-request-count" hidden></span>
+          </a>
+          <a href="/admin/academic.html" class="nav-item" data-href="/admin/academic.html">
+            <span data-feather="book-open"></span>
+            <span class="nav-item-text">Cursos & Disciplinas</span>
+          </a>
+          <a href="/admin/classes.html" class="nav-item" data-href="/admin/classes.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Turmas</span>
+          </a>
+          <a href="/admin/periods.html" class="nav-item" data-href="/admin/periods.html">
+            <span data-feather="calendar"></span>
+            <span class="nav-item-text">Períodos Letivos</span>
+          </a>
+          <a href="/admin/audit.html" class="nav-item" data-href="/admin/audit.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Auditoria</span>
+          </a>
+          <a href="/admin/settings.html" class="nav-item" data-href="/admin/settings.html">
+            <span data-feather="settings"></span>
+            <span class="nav-item-text">Configurações</span>
+          </a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Monitoramento</div>
+          <a href="/admin/ai-status.html" class="nav-item" data-href="/admin/ai-status.html">
+            <span data-feather="activity"></span>
+            <span class="nav-item-text">Status IA</span>
+          </a>
+          <a href="/admin/storage.html" class="nav-item" data-href="/admin/storage.html">
+            <span data-feather="database"></span>
+            <span class="nav-item-text">Armazenamento</span>
+          </a>
+          <a href="/admin/logs.html" class="nav-item" data-href="/admin/logs.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Logs do Sistema</span>
+          </a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost" id="sidebar-collapse" style="width: 100%; justify-content: center;">
+          <span data-feather="chevron-left"></span>
+          <span class="nav-item-text">Colapsar</span>
+        </button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu">
+            <span data-feather="menu"></span>
+          </button>
+          <div class="page-title-group">
+            <h1 class="page-title">Painel Administrativo</h1>
+            <p>Gerenciamento completo do sistema</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="header-actions">
+            <button class="icon-btn" id="notifications-btn" aria-label="Notificações">
+              <span data-feather="bell"></span>
+              <span class="badge" id="header-access-request-count" hidden></span>
+            </button>
+            <button class="icon-btn" id="refresh-btn" aria-label="Atualizar">
+              <span data-feather="refresh-cw"></span>
+            </button>
+          </div>
+          <div class="user-menu dropdown">
+            <button class="user-menu-btn" id="user-menu-btn">
+              <div class="user-avatar" id="user-avatar">A</div>
+              <div class="user-info">
+                <span class="user-name" id="user-name">Admin</span>
+                <span class="user-role" id="user-role">admin</span>
+              </div>
+            </button>
+            <div class="dropdown-menu" id="user-dropdown">
+              <a href="/profile.html" class="dropdown-item"><span data-feather="user"></span> Meu Perfil</a>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="logout-btn"><span data-feather="log-out"></span> Sair</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="page-content">
+        <!-- Admin Header -->
+        <div class="admin-header">
+          <div class="admin-info">
+            <h1>Bem-vindo, <span id="admin-name">Administrador</span></h1>
+            <p>Visão geral do sistema e acessos rápidos</p>
+          </div>
+          <div class="system-status" id="system-status">
+            <div class="status-item">
+              <span class="status-dot online" id="db-status"></span>
+              <span>Banco de Dados</span>
+            </div>
+            <div class="status-item">
+              <span class="status-dot online" id="ai-status"></span>
+              <span>Serviço IA</span>
+            </div>
+            <div class="status-item">
+              <span class="status-dot online" id="storage-status"></span>
+              <span>Armazenamento</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- Main Grid -->
+        <div class="admin-grid">
+          <!-- User Management -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="users"></span> Gestão de Usuários</h2>
+              <a href="/admin/users.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div class="admin-section-body">
+              <a href="/admin/users.html?role=student" class="admin-link">
+                <span><span data-feather="graduation-cap"></span> Alunos</span>
+                <span class="badge badge-status info" id="count-students">0</span>
+              </a>
+              <a href="/admin/users.html?role=teacher" class="admin-link">
+                <span><span data-feather="user"></span> Professores</span>
+                <span class="badge badge-status primary" id="count-teachers">0</span>
+              </a>
+              <a href="/admin/users.html?role=admin" class="admin-link">
+                <span><span data-feather="shield"></span> Administradores</span>
+                <span class="badge badge-status danger" id="count-admins">0</span>
+              </a>
+              <a href="/admin/users.html?status=pending" class="admin-link">
+                <span><span data-feather="clock"></span> Pendentes de Aprovação</span>
+                <span class="badge badge-status warning" id="count-pending">0</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Academic Management -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="book-open"></span> Gestão Acadêmica</h2>
+              <a href="/admin/academic.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div class="admin-section-body">
+              <a href="/admin/academic.html#courses" class="admin-link">
+                <span><span data-feather="award"></span> Cursos</span>
+                <span class="badge badge-status gray" id="count-courses">0</span>
+              </a>
+              <a href="/admin/academic.html#subjects" class="admin-link">
+                <span><span data-feather="book"></span> Disciplinas</span>
+                <span class="badge badge-status gray" id="count-subjects">0</span>
+              </a>
+              <a href="/admin/classes.html" class="admin-link">
+                <span><span data-feather="users"></span> Turmas</span>
+                <span class="badge badge-status gray" id="count-classes">0</span>
+              </a>
+              <a href="/admin/periods.html" class="admin-link">
+                <span><span data-feather="calendar"></span> Períodos Letivos</span>
+                <span class="badge badge-status gray" id="count-periods">0</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Exams & AI -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="file-text"></span> Provas & IA</h2>
+              <a href="/exams/list.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div class="admin-section-body">
+              <a href="/exams/list.html" class="admin-link">
+                <span><span data-feather="file-text"></span> Banco de Provas</span>
+                <span class="badge badge-status gray" id="count-exams">0</span>
+              </a>
+              <a href="/ai/corrections.html" class="admin-link">
+                <span><span data-feather="check-circle"></span> Correções por IA</span>
+                <span class="badge badge-status gray" id="count-corrections">0</span>
+              </a>
+              <a href="/correcao-lote.html" class="admin-link">
+                <span><span data-feather="upload"></span> Lotes de Correção</span>
+                <span class="badge badge-status gray" id="count-batches">0</span>
+              </a>
+              <a href="/ai/review.html" class="admin-link">
+                <span><span data-feather="alert-triangle"></span> Pendentes de Revisão</span>
+                <span class="badge badge-status warning" id="count-pending-review">0</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- System Metrics -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="activity"></span> Métricas do Sistema</h2>
+            </div>
+            <div class="admin-section-body">
+              <div class="system-metrics" id="system-metrics">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Users -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="user-plus"></span> Últimos Usuários Cadastrados</h2>
+              <a href="/admin/users.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div class="admin-section-body">
+              <div class="table-container">
+                <table class="table user-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Email</th>
+                      <th>Perfil</th>
+                      <th>Status</th>
+                      <th>Cadastro</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-users-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audit Log -->
+          <div class="admin-section">
+            <div class="admin-section-header">
+              <h2 class="admin-section-title"><span data-feather="file-text"></span> Auditoria Recente</h2>
+              <a href="/admin/audit.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div class="admin-section-body">
+              <div id="recent-audit"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/main.js"></script>
+  <script>
+    let lastAccessRequestCount = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const authenticated = await Auth.init();
+      if (!authenticated) {
+        window.location.replace('/login.html');
+        return;
+      }
+      if (!State.hasRole('admin')) {
+        window.location.replace(Auth.dashboardPath());
+        return;
+      }
+
+      Sidebar.init();
+      Sidebar.renderUserInfo();
+      await loadAccessRequestCount();
+      window.setInterval(() => loadAccessRequestCount(false), 15000);
+      document.getElementById('notifications-btn').addEventListener('click', () => {
+        window.location.href = '/admin/access-requests.html';
+      });
+      await loadAdminData();
+    });
+
+    async function loadAccessRequestCount(showError = true) {
+      try {
+        const result = await api.request('/access-requests/pending-count');
+        const count = Number(result.count);
+        for (const id of ['access-request-count', 'header-access-request-count']) {
+          const badge = document.getElementById(id);
+          badge.textContent = count > 99 ? '99+' : String(count);
+          badge.hidden = count === 0;
+        }
+        if (lastAccessRequestCount !== null && count > lastAccessRequestCount) {
+          const newRequests = count - lastAccessRequestCount;
+          UI.showToast(
+            `${newRequests} novo${newRequests === 1 ? '' : 's'} chamado${newRequests === 1 ? '' : 's'} de acesso.`,
+            'info',
+          );
+        } else if (lastAccessRequestCount === null && count > 0) {
+          UI.showToast(
+            `Há ${count} chamado${count === 1 ? '' : 's'} de acesso aguardando análise.`,
+            'info',
+          );
+        }
+        lastAccessRequestCount = count;
+        document.getElementById('notifications-btn').setAttribute(
+          'aria-label',
+          count === 0 ? 'Nenhum chamado de acesso pendente' : `${count} chamados de acesso pendentes`,
+        );
+      } catch (error) {
+        console.error('Não foi possível atualizar a contagem de chamados:', error);
+        if (showError) {
+          UI.showError(error.message || 'Não foi possível verificar os chamados de acesso');
+        }
+      }
+    }
+
+    async function loadAdminData() {
+      try {
+        const profile = await api.getProfile();
+        document.getElementById('admin-name').textContent = profile.name || profile.username;
+        document.getElementById('user-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
+
+        renderStats();
+        await loadSystemStatus();
+        await loadRecentUsers();
+        await loadRecentAudit();
+      } catch (error) {
+        UI.showError('Erro ao carregar dados administrativos');
+      }
+    }
+
+    function renderStats() {
+      const stats = [
+        { label: 'Total de Usuários', value: '1.234', icon: 'users', color: 'primary' },
+        { label: 'Provas Cadastradas', value: '89', icon: 'file-text', color: 'info' },
+        { label: 'Correções IA (mês)', value: '2.456', icon: 'check-circle', color: 'success' },
+        { label: 'Lotes Processados', value: '23', icon: 'upload', color: 'warning' },
+      ];
+
+      document.getElementById('stats-grid').innerHTML = stats.map(s => `
+        <div class="stat-card">
+          <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
+          <div class="stat-content">
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    async function loadSystemStatus() {
+      // Mock - replace with real health checks
+      document.getElementById('system-metrics').innerHTML = `
+        <div class="metric-item">
+          <span class="metric-label">Uptime</span>
+          <span class="metric-value">99.9%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Req/min</span>
+          <span class="metric-value">142</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Tempo Médio</span>
+          <span class="metric-value">145ms</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Erro Rate</span>
+          <span class="metric-value">0.02%</span>
+        </div>
+      `;
+    }
+
+    async function loadRecentUsers() {
+      // Mock data
+      const users = [
+        { name: 'João Silva', email: 'joao@email.com', role: 'student', status: 'active', created: '2026-11-10' },
+        { name: 'Maria Santos', email: 'maria@email.com', role: 'student', status: 'active', created: '2026-11-09' },
+        { name: 'Prof. Carlos', email: 'carlos@email.com', role: 'teacher', status: 'active', created: '2026-11-08' },
+        { name: 'Ana Costa', email: 'ana@email.com', role: 'student', status: 'pending', created: '2026-11-07' },
+        { name: 'Admin Novo', email: 'novo@admin.com', role: 'admin', status: 'active', created: '2026-11-05' },
+      ];
+
+      document.getElementById('recent-users-body').innerHTML = users.map(u => `
+        <tr>
+          <td>${UI.escapeHtml(u.name)}</td>
+          <td>${UI.escapeHtml(u.email)}</td>
+          <td style="text-align: center;"><span class="role-badge ${u.role}">${u.role}</span></td>
+          <td style="text-align: center;"><span class="status-badge ${u.status}">${u.status === 'active' ? 'Ativo' : 'Pendente'}</span></td>
+          <td>${UI.formatDate(u.created)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadRecentAudit() {
+      // Mock data
+      const audits = [
+        { action: 'CREATE_USER', entity: 'User', description: 'Novo aluno cadastrado: João Silva', user: 'admin', time: '2 min atrás' },
+        { action: 'EXAM_PUBLISHED', entity: 'Exam', description: 'Prova "Cálculo I - P1" publicada', user: 'prof.carlos', time: '15 min atrás' },
+        { action: 'BATCH_COMPLETED', entity: 'GradingBatch', description: 'Lote #1234 finalizado - 45 provas corrigidas', user: 'system', time: '1 hora atrás' },
+        { action: 'CORRECTION_REVIEWED', entity: 'CorrectionReview', description: 'Correção aprovada para aluno Maria Santos', user: 'prof.carlos', time: '2 horas atrás' },
+        { action: 'SETTINGS_UPDATED', entity: 'SystemConfig', description: 'Configuração de IA atualizada', user: 'admin', time: '3 horas atrás' },
+      ];
+
+      document.getElementById('recent-audit').innerHTML = audits.map(a => `
+        <div class="activity-item">
+          <div class="activity-icon primary" data-feather="activity"></div>
+          <div class="activity-content">
+            <div class="activity-title">${UI.escapeHtml(a.description)}</div>
+            <div class="activity-meta">${a.action} • ${UI.escapeHtml(a.user)} • ${a.time}</div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+  </script>
+</body>
+</html>

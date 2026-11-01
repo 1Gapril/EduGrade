@@ -1,0 +1,87 @@
+[project]
+name = "edugrade"
+version = "0.1.0"
+description = "Sistema de Gestão e Desempenho Acadêmico com IA para Correção de Provas"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "sqlalchemy>=2.0.25",
+    "alembic>=1.13.0",
+    "pydantic[email]>=2.5.3",
+    "pydantic-settings>=2.1.0",
+    "email-validator>=2.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "cryptography>=41.0",
+    "passlib[argon2]>=1.7.4",
+    "python-multipart>=0.0.6",
+    "python-dotenv>=1.0.0",
+    "reportlab>=4.0.8",
+    "qrcode[pil]>=7.4.2",
+    "pillow>=10.2.0",
+    "pymupdf>=1.23.0",
+    "opencv-python>=4.9.0",
+    "numpy>=1.26.0",
+    "pytesseract>=0.3.10",
+    "httpx>=0.26.0",
+    "pytest>=7.4.4",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.3",
+    "pytest-mock>=3.12.0",
+    "faker>=22.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.15",
+    "black>=23.12.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+ai = [
+    "ollama>=0.2.0",
+    "paddleocr>=2.7.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=backend/app",
+    "--cov-report=term-missing",
+    "--cov-report=html:reports/coverage",
+    "--cov-fail-under=80",
+    "-v",
+]
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM", "T20"]
+ignore = ["E501", "S101"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

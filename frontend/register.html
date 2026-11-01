@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solicitar acesso - EduGrade</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .access-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4);
+    }
+    .access-card {
+      width: 100%;
+      max-width: 680px;
+    }
+    .access-card .form-group {
+      margin-bottom: var(--space-4);
+    }
+    .access-actions {
+      display: flex;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+      margin-top: var(--space-5);
+    }
+    .access-notice {
+      margin-bottom: var(--space-5);
+      color: var(--color-gray-600);
+    }
+    .access-result {
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-4);
+      background: var(--color-success-light);
+      color: var(--color-success);
+    }
+    .access-result.error {
+      background: var(--color-danger-light);
+      color: var(--color-danger);
+    }
+  </style>
+</head>
+<body>
+  <main class="access-page">
+    <section class="card access-card" aria-labelledby="access-title">
+      <div class="card-header">
+        <h1 class="card-title" id="access-title">Solicitar acesso</h1>
+      </div>
+      <div class="card-body">
+        <p class="access-notice">Preencha seus dados para abrir um chamado. Um administrador analisará a solicitação e, se aprovada, criará sua conta. Não informe uma senha neste formulário.</p>
+        <div id="request-result" class="access-result" role="status" hidden></div>
+        <form id="access-request-form">
+          <div class="form-group">
+            <label class="form-label" for="full_name">Nome completo</label>
+            <input class="form-input" id="full_name" name="full_name" required minlength="2" maxlength="255" autocomplete="name">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="email">E-mail para contato</label>
+            <input class="form-input" id="email" name="email" type="email" required maxlength="255" autocomplete="email">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="username">Usuário desejado</label>
+            <input class="form-input" id="username" name="username" required minlength="3" maxlength="100" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="phone">Telefone/WhatsApp</label>
+            <input class="form-input" id="phone" name="phone" type="tel" maxlength="40" autocomplete="tel">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="requested_role">Acesso solicitado</label>
+            <select class="form-input" id="requested_role" name="requested_role" required>
+              <option value="student">Aluno</option>
+              <option value="teacher">Professor</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="justification">Motivo da solicitação</label>
+            <textarea class="form-input" id="justification" name="justification" required minlength="10" maxlength="2000" rows="4"></textarea>
+          </div>
+          <div class="access-actions">
+            <button class="btn btn-primary btn-lg" id="submit-request" type="submit">Abrir chamado</button>
+            <a class="btn btn-secondary btn-lg" href="/login.html">Voltar para o login</a>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+  <script>
+    const form = document.getElementById('access-request-form');
+    const result = document.getElementById('request-result');
+    const submitButton = document.getElementById('submit-request');
+
+    function getRequestErrorMessage(data) {
+      if (Array.isArray(data.detail)) {
+        return data.detail.map(error => {
+          const field = error.loc?.at(-1);
+          if (field === 'email') return 'Informe um e-mail válido, como nome@dominio.com.';
+          if (field === 'username') return 'O usuário deve ter pelo menos 3 caracteres.';
+          if (field === 'justification') return 'O motivo deve ter pelo menos 10 caracteres.';
+          return error.msg || 'Confira os dados preenchidos.';
+        }).join(' ');
+      }
+
+      if (typeof data.detail === 'string') return data.detail;
+      if (typeof data.message === 'string') return data.message;
+      return 'Não foi possível enviar o chamado.';
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      result.hidden = true;
+      submitButton.disabled = true;
+      submitButton.textContent = 'Enviando...';
+      try {
+        const response = await fetch('/api/v1/access-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(getRequestErrorMessage(data));
+        }
+        form.reset();
+        result.classList.remove('error');
+        result.textContent = 'Chamado aberto com sucesso. Um administrador analisará sua solicitação.';
+        result.hidden = false;
+      } catch (error) {
+        result.classList.add('error');
+        result.textContent = error.message || 'Erro de conexão ao enviar o chamado.';
+        result.hidden = false;
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Abrir chamado';
+      }
+    });
+  </script>
+</body>
+</html>

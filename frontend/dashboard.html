@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduGrade - Dashboard</title>
+  <link rel="stylesheet" href="css/main.css">
+  <style>
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-6);
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+    .page-title-group h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--color-gray-900);
+    }
+    .page-title-group p {
+      color: var(--color-gray-500);
+      font-size: 0.875rem;
+      margin-top: var(--space-1);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+    .stat-card {
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      transition: all var(--transition-fast);
+    }
+    .stat-card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-gray-300);
+    }
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-white);
+    }
+    .stat-icon.primary { background: var(--color-primary); }
+    .stat-icon.success { background: var(--color-success); }
+    .stat-icon.warning { background: var(--color-warning); }
+    .stat-icon.danger { background: var(--color-danger); }
+    .stat-icon.info { background: var(--color-info); }
+    .stat-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--color-gray-900);
+      line-height: 1.2;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--color-gray-500);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: var(--space-1);
+    }
+    .stat-trend {
+      font-size: 0.75rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-top: var(--space-1);
+    }
+    .stat-trend.positive { color: var(--color-success); }
+    .stat-trend.negative { color: var(--color-danger); }
+    .stat-trend.neutral { color: var(--color-gray-500); }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: var(--space-6);
+    }
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .chart-placeholder {
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--color-gray-50);
+      border-radius: var(--radius-lg);
+      color: var(--color-gray-400);
+      border: 1px dashed var(--color-gray-300);
+    }
+    .recent-activity {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--color-gray-100);
+    }
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+    .activity-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .activity-icon.primary { background: var(--color-primary-light); color: var(--color-primary); }
+    .activity-icon.success { background: var(--color-success-light); color: var(--color-success); }
+    .activity-icon.warning { background: var(--color-warning-light); color: var(--color-warning); }
+    .activity-icon.danger { background: var(--color-danger-light); color: var(--color-danger); }
+    .activity-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .activity-title {
+      font-weight: 500;
+      color: var(--color-gray-900);
+      font-size: 0.875rem;
+    }
+    .activity-meta {
+      font-size: 0.75rem;
+      color: var(--color-gray-500);
+      margin-top: var(--space-1);
+    }
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+    .quick-action-btn {
+      flex: 1;
+      min-width: 160px;
+      padding: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      background: var(--color-white);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-2);
+      text-align: center;
+      transition: all var(--transition-fast);
+    }
+    .quick-action-btn:hover {
+      border-color: var(--color-primary);
+      background: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    .quick-action-btn i {
+      width: 28px;
+      height: 28px;
+    }
+    .quick-action-btn span {
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" data-feather="graduation-cap"></div>
+        <span class="sidebar-title">EduGrade</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Principal</div>
+          <a href="/dashboard.html" class="nav-item" data-href="/dashboard.html">
+            <span data-feather="home"></span>
+            <span class="nav-item-text">Dashboard</span>
+          </a>
+        </div>
+
+        <div class="nav-section" id="nav-academic">
+          <div class="nav-section-title">Acadêmico</div>
+          <a href="/aluno/dashboard.html" class="nav-item" data-href="/aluno/dashboard.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Alunos</span>
+          </a>
+          <a href="/professor/dashboard.html" class="nav-item" data-href="/professor/dashboard.html">
+            <span data-feather="book-open"></span>
+            <span class="nav-item-text">Professores</span>
+          </a>
+          <a href="/admin/academic.html" class="nav-item" data-href="/admin/academic.html">
+            <span data-feather="database"></span>
+            <span class="nav-item-text">Cursos & Disciplinas</span>
+          </a>
+          <a href="/admin/classes.html" class="nav-item" data-href="/admin/classes.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Turmas</span>
+          </a>
+          <a href="/admin/periods.html" class="nav-item" data-href="/admin/periods.html">
+            <span data-feather="calendar"></span>
+            <span class="nav-item-text">Períodos Letivos</span>
+          </a>
+        </div>
+
+        <div class="nav-section" id="nav-exams">
+          <div class="nav-section-title">Provas</div>
+          <a href="/exams/list.html" class="nav-item" data-href="/exams/list.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Banco de Provas</span>
+          </a>
+          <a href="/exams/create.html" class="nav-item" data-href="/exams/create.html">
+            <span data-feather="plus"></span>
+            <span class="nav-item-text">Nova Prova</span>
+          </a>
+          <a href="/exams/print.html" class="nav-item" data-href="/exams/print.html">
+            <span data-feather="printer"></span>
+            <span class="nav-item-text">Impressão & QR Codes</span>
+          </a>
+        </div>
+
+        <div class="nav-section" id="nav-ai">
+          <div class="nav-section-title">IA & Correção</div>
+          <a href="/correcao-lote.html" class="nav-item" data-href="/correcao-lote.html">
+            <span data-feather="upload"></span>
+            <span class="nav-item-text">Correção em Lote</span>
+          </a>
+          <a href="/ai/corrections.html" class="nav-item" data-href="/ai/corrections.html">
+            <span data-feather="activity"></span>
+            <span class="nav-item-text">Correções por IA</span>
+          </a>
+          <a href="/ai/review.html" class="nav-item" data-href="/ai/review.html">
+            <span data-feather="check-circle"></span>
+            <span class="nav-item-text">Revisão Pendente</span>
+          </a>
+        </div>
+
+        <div class="nav-section" id="nav-admin">
+          <div class="nav-section-title">Administração</div>
+          <a href="/admin/users.html" class="nav-item" data-href="/admin/users.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Usuários</span>
+          </a>
+          <a href="/admin/audit.html" class="nav-item" data-href="/admin/audit.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Auditoria</span>
+          </a>
+          <a href="/admin/settings.html" class="nav-item" data-href="/admin/settings.html">
+            <span data-feather="settings"></span>
+            <span class="nav-item-text">Configurações</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost" id="sidebar-collapse" style="width: 100%; justify-content: center;" aria-label="Colapsar sidebar">
+          <span data-feather="chevron-left"></span>
+          <span class="nav-item-text">Colapsar</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu">
+            <span data-feather="menu"></span>
+          </button>
+          <div class="page-title-group" id="page-title-group">
+            <h1 class="page-title" id="page-title">Dashboard</h1>
+            <p id="page-subtitle">Visão geral do sistema</p>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <div class="header-actions">
+            <button class="icon-btn" id="notifications-btn" aria-label="Notificações">
+              <span data-feather="bell"></span>
+              <span class="badge" id="notification-badge" style="display: none;">3</span>
+            </button>
+            <button class="icon-btn" id="refresh-btn" aria-label="Atualizar">
+              <span data-feather="refresh-cw"></span>
+            </button>
+          </div>
+
+          <div class="user-menu dropdown">
+            <button class="user-menu-btn" id="user-menu-btn" aria-label="Menu do usuário">
+              <div class="user-avatar" id="user-avatar">U</div>
+              <div class="user-info">
+                <span class="user-name" id="user-name">Usuário</span>
+                <span class="user-role" id="user-role">role</span>
+              </div>
+            </button>
+            <div class="dropdown-menu" id="user-dropdown">
+              <a href="/profile.html" class="dropdown-item">
+                <span data-feather="user"></span>
+                Meu Perfil
+              </a>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="logout-btn">
+                <span data-feather="log-out"></span>
+                Sair
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="page-content" id="page-content">
+        <!-- Page-specific content goes here -->
+      </div>
+    </main>
+  </div>
+
+  <script src="js/main.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Initialize auth and sidebar
+      const authenticated = await Auth.init();
+      if (!authenticated) {
+        window.location.replace('/login.html');
+        return;
+      }
+
+      const dashboardPath = Auth.dashboardPath();
+      if (dashboardPath !== '/dashboard.html') {
+        window.location.replace(dashboardPath);
+        return;
+      }
+
+      Sidebar.init();
+
+      // Load page-specific content
+      if (typeof window.loadPageContent === 'function') {
+        await window.loadPageContent();
+      }
+    });
+  </script>
+</body>
+</html>

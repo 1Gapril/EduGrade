@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .settings-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start; }
+    .settings-nav, .settings-card { background: var(--color-white); border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); }
+    .settings-nav { padding: 10px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+    .settings-nav a { display: block; padding: 9px 11px; border-radius: var(--radius-md); color: var(--color-gray-700); text-decoration: none; font-size: .9rem; }
+    .settings-nav a:hover, .settings-nav a.active { background: var(--color-primary-light); color: var(--color-primary); }
+    .settings-content { min-width: 0; display: grid; gap: 20px; }
+    .settings-card { padding: 20px; scroll-margin-top: 20px; }
+    .settings-card h2 { margin: 0 0 6px; font-size: 1.15rem; }
+    .settings-card > p { color: var(--color-gray-600); margin: 0 0 16px; }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+    .settings-field { display: grid; gap: 6px; }
+    .settings-field label { color: var(--color-gray-700); font-size: .875rem; font-weight: 600; }
+    .settings-field input, .settings-field select, .settings-field textarea { width: 100%; }
+    .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .settings-status { min-height: 1.35rem; margin-top: 10px; font-size: .875rem; }
+    .settings-status.error { color: var(--color-danger); }
+    .settings-status.success { color: var(--color-success); }
+    .settings-alert { border-radius: var(--radius-md); padding: 12px 14px; margin: 12px 0; background: var(--color-warning-light); color: var(--color-gray-800); }
+    .settings-alert.error { background: var(--color-danger-light); }
+    .settings-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+    .settings-metric { border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 14px; }
+    .settings-metric span { display: block; color: var(--color-gray-500); font-size: .78rem; }
+    .settings-metric strong { display: block; margin-top: 6px; color: var(--color-gray-900); overflow-wrap: anywhere; }
+    .provider-list { display: grid; gap: 10px; }
+    .provider-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 14px; }
+    .provider-card strong { display: block; }
+    .provider-meta { color: var(--color-gray-500); font-size: .82rem; margin-top: 4px; }
+    .provider-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .settings-tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 9px; font-size: .75rem; background: var(--color-gray-100); color: var(--color-gray-700); }
+    .settings-tag.connected { background: var(--color-success-light); color: var(--color-success); }
+    .settings-tag.error { background: var(--color-danger-light); color: var(--color-danger); }
+    .settings-tag.pending { background: var(--color-warning-light); color: var(--color-gray-800); }
+    .settings-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .settings-note { color: var(--color-gray-500); font-size: .82rem; }
+    .settings-checkbox { display: flex; align-items: center; gap: 8px; }
+    .settings-checkbox input { width: auto; }
+    @media (max-width: 850px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; max-height: none; display: flex; gap: 4px; overflow-x: auto; } .settings-nav a { white-space: nowrap; } }
+    @media (max-width: 560px) { .settings-card { padding: 15px; } .provider-card { align-items: flex-start; } }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" data-feather="graduation-cap"></div>
+        <span class="sidebar-title">EduGrade</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Administração</div>
+          <a href="/admin/dashboard.html" class="nav-item" data-href="/admin/dashboard.html"><span data-feather="home"></span><span class="nav-item-text">Dashboard</span></a>
+          <a href="/admin/users.html" class="nav-item" data-href="/admin/users.html"><span data-feather="users"></span><span class="nav-item-text">Usuários</span></a>
+          <a href="/admin/access-requests.html" class="nav-item" data-href="/admin/access-requests.html"><span data-feather="bell"></span><span class="nav-item-text">Chamados de acesso</span></a>
+          <a href="/admin/academic.html" class="nav-item" data-href="/admin/academic.html"><span data-feather="book-open"></span><span class="nav-item-text">Cursos & Disciplinas</span></a>
+          <a href="/admin/audit.html" class="nav-item" data-href="/admin/audit.html"><span data-feather="file-text"></span><span class="nav-item-text">Auditoria</span></a>
+          <a href="/admin/settings.html" class="nav-item active" data-href="/admin/settings.html"><span data-feather="settings"></span><span class="nav-item-text">Configurações</span></a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost" id="sidebar-collapse" style="width: 100%; justify-content: center;"><span data-feather="chevron-left"></span><span class="nav-item-text">Colapsar</span></button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu"><span data-feather="menu"></span></button>
+          <div class="page-title-group"><h1 class="page-title">Central de Configurações</h1><p>Provedores, credenciais e integrações do EduGrade</p></div>
+        </div>
+        <div class="header-right">
+          <div class="user-menu dropdown">
+            <button class="user-menu-btn" id="user-menu-btn"><div class="user-avatar" id="user-avatar">A</div><div class="user-info"><span class="user-name" id="user-name">Admin</span><span class="user-role" id="user-role">admin</span></div></button>
+            <div class="dropdown-menu" id="user-dropdown"><a href="/profile.html" class="dropdown-item"><span data-feather="user"></span> Meu Perfil</a><div class="dropdown-divider"></div><button class="dropdown-item danger" id="logout-btn"><span data-feather="log-out"></span> Sair</button></div>
+          </div>
+        </div>
+      </header>
+      <div class="page-content">
+        <div class="settings-layout">
+          <nav class="settings-nav" aria-label="Seções de configuração">
+            <a href="#overview">Visão geral</a><a href="#providers">Provedores de IA</a><a href="#models">Modelos</a>
+            <a href="#nvidia">NVIDIA NIM</a><a href="#fcc">FCC / Claude Code</a><a href="#system">Sistema e ambiente</a>
+            <a href="#database">Banco de dados</a><a href="#storage">Armazenamento</a><a href="#security">Segurança e auditoria</a>
+          </nav>
+          <div class="settings-content">
+            <section class="settings-card" id="overview">
+              <h2>Visão geral</h2><p>Estados reais consultados no EduGrade e na API administrativa do FCC. Provedores sem teste bem-sucedido não são marcados como conectados.</p>
+              <div id="overview-alert" aria-live="polite"></div><div class="settings-cards" id="overview-cards"><span>Carregando estado do sistema...</span></div>
+              <div class="settings-actions"><button class="btn btn-secondary" id="refresh-overview">Atualizar estado</button></div>
+              <div class="settings-status" id="overview-message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="settings-card" id="providers">
+              <h2>Provedores de IA</h2><p>Cadastre endpoints suportados. As chaves são criptografadas no servidor e nunca retornadas em texto.</p>
+              <div id="vault-alert" class="settings-alert" hidden></div>
+              <div class="provider-list" id="provider-list"><span>Carregando provedores...</span></div>
+              <hr style="margin:20px 0;border:0;border-top:1px solid var(--color-gray-200)">
+              <h3 id="provider-form-heading">Adicionar provedor</h3>
+              <form id="provider-form">
+                <input type="hidden" name="editing_provider_id">
+                <div class="settings-grid">
+                  <div class="settings-field"><label for="provider-type">Tipo</label><select class="form-input" id="provider-type" name="provider_type" required>
+                    <option value="nvidia_nim">NVIDIA NIM</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic / Claude API</option><option value="google_gemini">Google Gemini</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="openrouter">OpenRouter</option><option value="ollama">Ollama local</option><option value="custom">Personalizado (OpenAI-compatible)</option>
+                  </select></div>
+                  <div class="settings-field"><label for="provider-id">Identificador</label><input class="form-input" id="provider-id" name="provider_id" required pattern="[a-z][a-z0-9_-]{1,79}" placeholder="nvidia_nim"></div>
+                  <div class="settings-field"><label for="provider-name">Nome da integração</label><input class="form-input" id="provider-name" name="name" required minlength="2" maxlength="120"></div>
+                  <div class="settings-field"><label for="provider-url">Base URL</label><input class="form-input" id="provider-url" name="base_url" required type="url" maxlength="500"></div>
+                  <div class="settings-field"><label for="provider-key">API Key</label><input class="form-input" id="provider-key" name="api_key" type="password" autocomplete="new-password" placeholder="Cole a chave; não será exibida novamente"></div>
+                  <div class="settings-field"><label for="provider-model">Modelo padrão</label><input class="form-input" id="provider-model" name="model" list="provider-model-options" placeholder="Consulte modelos ou informe o identificador"></div>
+                  <datalist id="provider-model-options"></datalist>
+                  <div class="settings-field"><label for="provider-vision">Modelo para imagens (opcional)</label><input class="form-input" id="provider-vision" name="vision_model" placeholder="Só configure se o modelo suportar imagens"></div>
+                  <div class="settings-field"><label for="provider-alternatives">Modelos alternativos</label><input class="form-input" id="provider-alternatives" name="alternative_models" placeholder="modelo-a, modelo-b"></div>
+                  <div class="settings-field"><label for="provider-timeout">Timeout (segundos)</label><input class="form-input" id="provider-timeout" name="timeout_seconds" type="number" min="1" max="600" value="60" required></div>
+                  <div class="settings-field"><label for="provider-retries">Tentativas</label><input class="form-input" id="provider-retries" name="max_retries" type="number" min="0" max="10" value="2" required></div>
+                  <div class="settings-field"><label for="provider-priority">Prioridade</label><input class="form-input" id="provider-priority" name="priority" type="number" min="1" max="10000" value="100" required></div>
+                  <div class="settings-field settings-checkbox"><label><input type="checkbox" name="is_enabled"> Provedor ativo</label></div>
+                  <div class="settings-field settings-checkbox"><label><input type="checkbox" name="is_default"> Usar como provedor principal</label></div>
+                </div>
+                <div class="settings-actions"><button class="btn btn-primary" id="save-provider" type="submit">Salvar provedor</button><button class="btn btn-secondary" id="test-provider-form" type="button">Testar conexão</button><button class="btn btn-ghost" id="cancel-provider-edit" type="button" hidden>Cancelar edição</button></div>
+                <div class="settings-status" id="provider-message" role="status" aria-live="polite"></div>
+              </form>
+            </section>
+
+            <section class="settings-card" id="models">
+              <h2>Modelos e capacidades</h2><p>O catálogo abaixo é recebido do endpoint de modelos do provedor após um teste real. Capacidades de imagem não são inferidas automaticamente; configure-as apenas após confirmação do fornecedor.</p>
+              <div id="model-catalog"><span>Selecione “Consultar modelos” em um provedor testado.</span></div>
+            </section>
+
+            <section class="settings-card" id="nvidia">
+              <h2>NVIDIA NIM</h2><p>Chaves e modelos NVIDIA são administrados pelo EduGrade e, somente após confirmação, podem ser enviados à API administrativa local do FCC.</p>
+              <p><a href="https://build.nvidia.com/settings/api-keys" target="_blank" rel="noopener noreferrer">Abrir NVIDIA API Keys</a></p>
+              <div class="settings-inline"><span class="settings-tag" id="nvidia-provider-state">Não configurado</span><span class="settings-note" id="nvidia-provider-detail">Cadastre NVIDIA NIM na seção Provedores.</span></div>
+              <div class="settings-field" style="margin-top:14px"><label for="fcc-nvidia-model">Modelo NVIDIA disponível no catálogo FCC</label><select class="form-input" id="fcc-nvidia-model"><option value="">Conecte-se ao FCC para consultar o catálogo</option></select></div>
+              <div class="settings-actions"><button class="btn btn-primary" id="sync-nvidia-fcc" type="button" disabled>Sincronizar provedor e modelo com FCC</button></div>
+              <p class="settings-note">A sincronização usa a API administrativa oficial do FCC, preserva chaves existentes e atualiza o catálogo após salvar a credencial. Se a atualização do catálogo falhar, a chave pode já ter sido salva no FCC.</p>
+              <div class="settings-status" id="nvidia-message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="settings-card" id="fcc">
+              <h2>FCC / Free Claude Code</h2><p>Estado obtido nos endpoints administrativos documentados pelo FCC. A URL é restrita a localhost para não expor a API administrativa na rede.</p>
+              <form id="fcc-form"><div class="settings-grid"><div class="settings-field"><label for="fcc-url">Endereço local</label><input class="form-input" id="fcc-url" name="base_url" type="url" required></div></div>
+                <div class="settings-actions"><button class="btn btn-primary" type="submit">Salvar endereço</button><button class="btn btn-secondary" id="test-fcc" type="button">Testar comunicação</button></div>
+              </form>
+              <div class="settings-status" id="fcc-message" role="status" aria-live="polite"></div>
+              <div class="settings-cards" id="fcc-details"></div>
+              <p class="settings-note" id="fcc-version-note"></p>
+              <h3>Provedores reportados pelo FCC</h3><div id="fcc-providers"><span>Carregando...</span></div>
+              <h3>Modelos disponíveis reportados pelo FCC</h3><div id="fcc-models" class="settings-note"></div>
+              <p class="settings-note">O FCC não expõe pela API de status a contagem de clientes conectados nem a versão instalada; esses campos não são presumidos.</p>
+            </section>
+
+            <section class="settings-card" id="system">
+              <h2>Sistema e ambiente</h2><p>Essas opções são validadas, salvas no banco de dados e aplicadas ao processo. Segredos fundamentais continuam no ambiente do servidor.</p>
+              <form id="system-form"><div class="settings-grid">
+                <div class="settings-field"><label for="setting-upload">Limite de upload (MB)</label><input class="form-input" id="setting-upload" name="max_upload_size_mb" type="number" min="1" max="500" required></div>
+                <div class="settings-field"><label for="setting-timeout">Timeout IA (segundos)</label><input class="form-input" id="setting-timeout" name="ai_timeout_seconds" type="number" min="1" max="600" required></div>
+                <div class="settings-field"><label for="setting-retries">Tentativas de IA</label><input class="form-input" id="setting-retries" name="ai_max_retries" type="number" min="0" max="10" required></div>
+                <div class="settings-field"><label for="setting-access-expiry">Expiração do acesso (minutos)</label><input class="form-input" id="setting-access-expiry" name="access_token_expire_minutes" type="number" min="5" max="1440" required></div>
+                <div class="settings-field"><label for="setting-refresh-expiry">Expiração da sessão de renovação (dias)</label><input class="form-input" id="setting-refresh-expiry" name="refresh_token_expire_days" type="number" min="1" max="90" required></div>
+                <div class="settings-field"><label for="setting-tesseract">Caminho do Tesseract</label><input class="form-input" id="setting-tesseract" name="tesseract_path" maxlength="500" required></div>
+              </div><div class="settings-actions"><button class="btn btn-primary" type="submit">Salvar configurações</button></div></form>
+              <div class="settings-status" id="system-message" role="status" aria-live="polite"></div>
+            </section>
+
+            <section class="settings-card" id="database">
+              <h2>Banco de dados</h2><p>Informações de diagnóstico. A URL de conexão e credenciais nunca são exibidas ou alteradas pelo painel.</p><div class="settings-cards" id="database-details"></div>
+              <p class="settings-note">Backup e restauração não estão conectados a uma operação segura nesta versão; nenhuma ação destrutiva é oferecida aqui.</p>
+            </section>
+
+            <section class="settings-card" id="storage">
+              <h2>Armazenamento</h2><p>Estado e espaço disponível no volume de uploads, sem listar conteúdo de arquivos privados.</p><div class="settings-cards" id="storage-details"></div>
+            </section>
+
+            <section class="settings-card" id="security">
+              <h2>Segurança e auditoria</h2><p>Apenas administradores autenticados podem acessar esta central. Alterações são auditadas sem registrar chaves ou segredos.</p>
+              <div id="security-details"></div><h3>Alterações recentes</h3><div id="settings-audit">Carregando auditoria...</div>
+              <p class="settings-note">A chave mestra de criptografia é configuração de bootstrap do servidor, não pode ser cadastrada nem recuperada pela interface.</p>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="../js/main.js"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <script>
+    let settingsOverview = null;
+    let providerCache = [];
+    const defaults = {
+      nvidia_nim: ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1'],
+      openai: ['OpenAI', 'https://api.openai.com/v1'],
+      anthropic: ['Anthropic', 'https://api.anthropic.com'],
+      google_gemini: ['Google Gemini', 'https://generativelanguage.googleapis.com'],
+      deepseek: ['DeepSeek', 'https://api.deepseek.com/v1'],
+      groq: ['Groq', 'https://api.groq.com/openai/v1'],
+      openrouter: ['OpenRouter', 'https://openrouter.ai/api/v1'],
+      ollama: ['Ollama', 'http://127.0.0.1:11434'],
+      custom: ['Provedor personalizado', 'https://'],
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      State.init();
+      if (!await Auth.init()) { window.location.replace('/login.html'); return; }
+      if (!Auth.requireRole('admin')) return;
+      Sidebar.init();
+      Sidebar.renderUserInfo();
+      if (window.feather) feather.replace();
+      bindSettingsEvents();
+      await loadSettingsPage();
+    });
+
+    function bindSettingsEvents() {
+      document.getElementById('refresh-overview').addEventListener('click', loadSettingsPage);
+      document.getElementById('provider-type').addEventListener('change', setProviderDefaults);
+      document.getElementById('provider-form').addEventListener('submit', saveProvider);
+      document.getElementById('test-provider-form').addEventListener('click', testProviderFromForm);
+      document.getElementById('cancel-provider-edit').addEventListener('click', resetProviderForm);
+      document.getElementById('system-form').addEventListener('submit', saveSystemSettings);
+      document.getElementById('fcc-form').addEventListener('submit', saveFccSettings);
+      document.getElementById('test-fcc').addEventListener('click', loadFccStatus);
+      document.getElementById('sync-nvidia-fcc').addEventListener('click', syncNvidia);
+      document.querySelectorAll('.settings-nav a').forEach(link => link.addEventListener('click', () => {
+        document.querySelectorAll('.settings-nav a').forEach(item => item.classList.remove('active'));
+        link.classList.add('active');
+      }));
+    }
+
+    async function loadSettingsPage() {
+      const message = document.getElementById('overview-message');
+      setMessage(message, 'Consultando configurações...');
+      try {
+        const [overview, providers, runtime, audit] = await Promise.all([
+          api.request('/admin/settings/overview'),
+          api.request('/admin/settings/providers'),
+          api.request('/admin/settings/system'),
+          api.request('/admin/settings/audit?limit=20'),
+        ]);
+        settingsOverview = overview;
+        providerCache = providers;
+        renderOverview(overview);
+        renderProviders(providers);
+        renderRuntimeSettings(runtime);
+        renderAudit(audit);
+        renderFcc(overview.fcc);
+        renderNvidia(providers);
+        document.getElementById('vault-alert').hidden = overview.encryption_key_configured;
+        if (!overview.encryption_key_configured) {
+          document.getElementById('vault-alert').textContent = 'Cofre desabilitado: configure CREDENTIAL_ENCRYPTION_KEY no bootstrap do servidor para cadastrar chaves. Consulte docs/SEGURANCA_CREDENCIAIS.md.';
+        }
+        setMessage(message, 'Estado atualizado.', 'success');
+      } catch (error) {
+        setMessage(message, error.message || 'Não foi possível carregar as configurações.', 'error');
+      }
+    }
+
+    function renderOverview(data) {
+      const defaultProvider = providerCache.find(item => item.is_default);
+      const cards = [
+        ['Provedores ativos', `${data.providers_enabled} / ${data.providers_total}`],
+        ['Provedor principal', defaultProvider ? `${defaultProvider.name} · ${defaultProvider.model || 'sem modelo'}` : 'Não configurado'],
+        ['NVIDIA NIM no EduGrade', statusLabel(providerCache.find(item => item.provider_type === 'nvidia_nim')?.status || 'not_configured')],
+        ['FCC local', data.fcc.connected ? `Conectado · ${data.fcc.active_model || 'modelo não informado'}` : 'Desconectado'],
+        ['Banco de dados', `${data.database.type} · ${statusLabel(data.database.status)}`],
+        ['Cofre de credenciais', data.encryption_key_configured ? 'Chave mestra configurada' : 'Pendente de bootstrap'],
+      ];
+      document.getElementById('overview-cards').replaceChildren(...cards.map(([label, value]) => metricCard(label, value)));
+      const alerts = [];
+      if (!data.encryption_key_configured) alerts.push('Chaves de API não podem ser salvas até inicializar o cofre.');
+      if (!data.fcc.connected) alerts.push(data.fcc.last_error || 'FCC não está conectado neste momento.');
+      if (data.providers_with_errors) alerts.push(`${data.providers_with_errors} provedor(es) com falha no último teste.`);
+      const alert = document.getElementById('overview-alert');
+      alert.replaceChildren();
+      if (alerts.length) {
+        const box = document.createElement('div');
+        box.className = 'settings-alert';
+        box.textContent = alerts.join(' ');
+        alert.append(box);
+      }
+      renderCardList('database-details', [
+        ['Status', statusLabel(data.database.status)],
+        ['Tipo', data.database.type],
+        ['Versão', data.database.version || 'Não informada'],
+        ['Tamanho', formatBytes(data.database.size_bytes)],
+      ]);
+      renderCardList('storage-details', [
+        ['Estado', statusLabel(data.storage.status)],
+        ['Diretório de uploads', data.storage.path],
+        ['Espaço livre', formatBytes(data.storage.free_bytes)],
+      ]);
+      const security = document.getElementById('security-details');
+      security.replaceChildren(metricCard('Criptografia de credenciais', data.encryption_key_configured ? 'Configurada no servidor' : 'Não configurada'));
+    }
+
+    function renderProviders(providers) {
+      const list = document.getElementById('provider-list');
+      list.replaceChildren();
+      if (!providers.length) {
+        const empty = document.createElement('p');
+        empty.className = 'settings-note';
+        empty.textContent = 'Nenhum provedor cadastrado. Adicione uma integração abaixo para configurá-la.';
+        list.append(empty);
+      }
+      providers.forEach(provider => {
+        const card = document.createElement('article');
+        card.className = 'provider-card';
+        const info = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = provider.name;
+        info.append(title);
+        const meta = document.createElement('div');
+        meta.className = 'provider-meta';
+        meta.textContent = `${provider.provider_id} · ${provider.model || 'sem modelo'} · ${provider.api_key_masked || 'sem chave'} · ${statusLabel(provider.status)}${provider.is_default ? ' · Principal' : ''}${provider.is_enabled ? ' · Ativo' : ' · Desativado'}`;
+        info.append(meta);
+        if (provider.last_error) {
+          const error = document.createElement('div');
+          error.className = 'provider-meta';
+          error.textContent = provider.last_error;
+          info.append(error);
+        }
+        const actions = document.createElement('div');
+        actions.className = 'provider-actions';
+        actions.append(
+          actionButton('Editar', () => editProvider(provider)),
+          actionButton('Consultar modelos', () => queryProviderModels(provider)),
+          actionButton('Testar', () => testProvider(provider.provider_id)),
+          actionButton('Remover', () => removeProvider(provider)),
+        );
+        card.append(info, actions);
+        list.append(card);
+      });
+    }
+
+    function renderNvidia(providers) {
+      const provider = providers.find(item => item.provider_type === 'nvidia_nim');
+      const tag = document.getElementById('nvidia-provider-state');
+      tag.textContent = provider ? statusLabel(provider.status) : 'Não configurado';
+      tag.className = `settings-tag ${provider?.status === 'connected' ? 'connected' : ['unavailable', 'authentication_error'].includes(provider?.status) ? 'error' : 'pending'}`;
+      document.getElementById('nvidia-provider-detail').textContent = provider
+        ? `${provider.name} · ${provider.api_key_masked || 'sem chave'} · ${provider.model || 'modelo não selecionado'}`
+        : 'Cadastre NVIDIA NIM na seção Provedores.';
+      const select = document.getElementById('fcc-nvidia-model');
+      const nimProvider = providers.find(item => item.provider_type === 'nvidia_nim');
+      const discoveredModels = (nimProvider?.available_models || []).map(model =>
+        model.startsWith('nvidia_nim/') ? model : `nvidia_nim/${model}`,
+      );
+      const nvidiaModels = [...new Set([
+        ...discoveredModels,
+        ...(settingsOverview?.fcc.models || []).filter(model => model.startsWith('nvidia_nim/')),
+      ])];
+      select.replaceChildren();
+      if (!nvidiaModels.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Nenhum modelo NVIDIA foi retornado pelo FCC';
+        select.append(option);
+      } else {
+        nvidiaModels.forEach(model => {
+          const option = document.createElement('option');
+          option.value = model;
+          option.textContent = model;
+          select.append(option);
+        });
+      }
+      document.getElementById('sync-nvidia-fcc').disabled = !provider?.api_key_configured || !nvidiaModels.length || !settingsOverview?.fcc.connected;
+    }
+
+    function renderFcc(fcc) {
+      document.getElementById('fcc-url').value = fcc.configured_url || '';
+      renderCardList('fcc-details', [
+        ['Serviço', statusLabel(fcc.status)],
+        ['Provedor principal', fcc.provider || 'Não informado'],
+        ['Modelo ativo', fcc.active_model || 'Não informado'],
+        ['Integração Claude Code', statusLabel(fcc.code_service_status || 'not_reported')],
+      ]);
+      document.getElementById('fcc-version-note').textContent = fcc.version_available
+        ? `Versão instalada: ${fcc.version}`
+        : 'A API de status instalada não informa a versão; nenhuma versão foi presumida.';
+      const providers = document.getElementById('fcc-providers');
+      providers.replaceChildren();
+      if (!fcc.providers?.length) {
+        providers.textContent = fcc.last_error || 'A API não retornou provedores.';
+      } else {
+        fcc.providers.forEach(item => {
+          const tag = document.createElement('span');
+          tag.className = `settings-tag ${item.status === 'ready' ? 'connected' : item.status === 'failed' ? 'error' : 'pending'}`;
+          tag.style.margin = '0 6px 6px 0';
+          tag.textContent = `${item.provider_id}: ${statusLabel(item.status)}`;
+          providers.append(tag);
+        });
+      }
+      const models = document.getElementById('fcc-models');
+      models.textContent = fcc.models?.length ? fcc.models.join(' · ') : 'Nenhum modelo foi retornado pelo catálogo FCC.';
+    }
+
+    function renderRuntimeSettings(data) {
+      const form = document.getElementById('system-form');
+      Object.entries(data).forEach(([key, value]) => {
+        if (form.elements.namedItem(key)) form.elements.namedItem(key).value = value;
+      });
+    }
+
+    function renderAudit(entries) {
+      const target = document.getElementById('settings-audit');
+      target.replaceChildren();
+      if (!entries.length) {
+        target.textContent = 'Nenhuma alteração de configuração registrada.';
+        return;
+      }
+      entries.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'provider-card';
+        const text = document.createElement('span');
+        text.textContent = `${entry.description} · ${new Date(entry.created_at).toLocaleString('pt-BR')}`;
+        row.append(text);
+        target.append(row);
+      });
+    }
+
+    function metricCard(label, value) {
+      const card = document.createElement('div');
+      card.className = 'settings-metric';
+      const title = document.createElement('span');
+      title.textContent = label;
+      const content = document.createElement('strong');
+      content.textContent = value == null ? 'Não informado' : String(value);
+      card.append(title, content);
+      return card;
+    }
+
+    function renderCardList(id, entries) {
+      const container = document.getElementById(id);
+      container.replaceChildren(...entries.map(([label, value]) => metricCard(label, value)));
+    }
+
+    function actionButton(label, callback) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-secondary btn-sm';
+      button.textContent = label;
+      button.addEventListener('click', callback);
+      return button;
+    }
+
+    function statusLabel(status) {
+      const labels = {
+        connected: 'Conectado', running: 'Ativo', ready: 'Disponível', failed: 'Falha',
+        unavailable: 'Indisponível', authentication_error: 'Erro de autenticação',
+        not_configured: 'Não configurado', test_pending: 'Teste pendente',
+        not_reported: 'Não informado', error: 'Erro', available: 'Disponível',
+      };
+      return labels[status] || status || 'Não informado';
+    }
+
+    function formatBytes(value) {
+      if (value == null) return 'Não disponível';
+      if (value < 1024) return `${value} B`;
+      const units = ['KB', 'MB', 'GB', 'TB'];
+      let size = value / 1024;
+      let index = 0;
+      while (size >= 1024 && index < units.length - 1) { size /= 1024; index += 1; }
+      return `${size.toFixed(1)} ${units[index]}`;
+    }
+
+    function setMessage(element, message, kind = '') {
+      element.textContent = message;
+      element.className = `settings-status ${kind}`;
+    }
+
+    function setProviderDefaults() {
+      const type = document.getElementById('provider-type').value;
+      const [name, url] = defaults[type];
+      if (!document.getElementById('provider-form').elements.editing_provider_id.value) {
+        document.getElementById('provider-name').value = name;
+        document.getElementById('provider-id').value = type;
+        document.getElementById('provider-url').value = url;
+      }
+    }
+
+    function providerPayload(form, includeIdentity) {
+      const data = new FormData(form);
+      const payload = {
+        provider_type: data.get('provider_type'),
+        name: data.get('name').trim(),
+        base_url: data.get('base_url').trim(),
+        model: data.get('model').trim() || null,
+        vision_model: data.get('vision_model').trim() || null,
+        alternative_models: data.get('alternative_models').split(',').map(value => value.trim()).filter(Boolean),
+        timeout_seconds: Number(data.get('timeout_seconds')),
+        max_retries: Number(data.get('max_retries')),
+        priority: Number(data.get('priority')),
+        is_enabled: form.elements.is_enabled.checked,
+        is_default: form.elements.is_default.checked,
+      };
+      const key = data.get('api_key').trim();
+      if (key) payload.api_key = key;
+      if (includeIdentity) payload.provider_id = data.get('provider_id').trim();
+      return payload;
+    }
+
+    async function saveProvider(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = document.getElementById('save-provider');
+      UI.setLoading(button, true);
+      try {
+        const editingId = form.elements.editing_provider_id.value;
+        const payload = providerPayload(form, !editingId);
+        const result = editingId
+          ? await api.request(`/admin/settings/providers/${encodeURIComponent(editingId)}`, { method: 'PUT', body: payload })
+          : await api.request('/admin/settings/providers', { method: 'POST', body: payload });
+        setMessage(document.getElementById('provider-message'), `${result.name} salvo.`, 'success');
+        resetProviderForm();
+        await loadSettingsPage();
+      } catch (error) {
+        setMessage(document.getElementById('provider-message'), error.message || 'Não foi possível salvar o provedor.', 'error');
+      } finally {
+        UI.setLoading(button, false);
+      }
+    }
+
+    async function testProviderFromForm() {
+      const form = document.getElementById('provider-form');
+      const editingId = form.elements.editing_provider_id.value;
+      if (!editingId) {
+        setMessage(document.getElementById('provider-message'), 'Salve o provedor antes de testar a conexão.', 'error');
+        return;
+      }
+      await testProvider(editingId);
+    }
+
+    async function testProvider(providerId) {
+      const message = document.getElementById('provider-message');
+      setMessage(message, 'Testando endpoint e consultando modelos...');
+      try {
+        const result = await api.request(`/admin/settings/providers/${encodeURIComponent(providerId)}/test`, { method: 'POST' });
+        setMessage(message, `${statusLabel(result.status)}: ${result.message}${result.available_models.length ? ` · ${result.available_models.length} modelos disponíveis` : ''}`, result.status === 'connected' ? 'success' : 'error');
+        await loadSettingsPage();
+      } catch (error) {
+        setMessage(message, error.message || 'Falha ao testar o provedor.', 'error');
+      }
+    }
+
+    async function queryProviderModels(provider) {
+      await testProvider(provider.provider_id);
+      const updated = providerCache.find(item => item.provider_id === provider.provider_id);
+      const output = document.getElementById('model-catalog');
+      output.replaceChildren();
+      if (!updated?.available_models.length) {
+        output.textContent = 'O provedor não retornou um catálogo de modelos.';
+        return;
+      }
+      const title = document.createElement('strong');
+      title.textContent = `${updated.name}: `;
+      const models = document.createElement('span');
+      models.textContent = updated.available_models.join(' · ');
+      output.append(title, models);
+      document.getElementById('provider-type').value = updated.provider_type;
+      document.getElementById('provider-model').value = updated.model || '';
+      document.getElementById('provider-model-options').replaceChildren(
+        ...updated.available_models.map(model => {
+          const option = document.createElement('option');
+          option.value = model;
+          return option;
+        }),
+      );
+      document.getElementById('provider-form').elements.editing_provider_id.value = updated.provider_id;
+    }
+
+    function editProvider(provider) {
+      const form = document.getElementById('provider-form');
+      form.elements.editing_provider_id.value = provider.provider_id;
+      form.elements.provider_id.value = provider.provider_id;
+      form.elements.provider_id.disabled = true;
+      form.elements.provider_type.value = provider.provider_type;
+      form.elements.name.value = provider.name;
+      form.elements.base_url.value = provider.base_url;
+      form.elements.api_key.value = '';
+      form.elements.api_key.placeholder = provider.api_key_masked || 'Cole para substituir a chave; vazio mantém a chave atual';
+      form.elements.model.value = provider.model || '';
+      form.elements.vision_model.value = provider.vision_model || '';
+      form.elements.alternative_models.value = provider.alternative_models.join(', ');
+      form.elements.timeout_seconds.value = provider.timeout_seconds;
+      form.elements.max_retries.value = provider.max_retries;
+      form.elements.priority.value = provider.priority;
+      form.elements.is_enabled.checked = provider.is_enabled;
+      form.elements.is_default.checked = provider.is_default;
+      document.getElementById('provider-form-heading').textContent = `Editar ${provider.name}`;
+      document.getElementById('save-provider').textContent = 'Salvar alterações';
+      document.getElementById('cancel-provider-edit').hidden = false;
+      document.getElementById('providers').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetProviderForm() {
+      const form = document.getElementById('provider-form');
+      form.reset();
+      form.elements.editing_provider_id.value = '';
+      form.elements.provider_id.disabled = false;
+      form.elements.api_key.placeholder = 'Cole a chave; não será exibida novamente';
+      document.getElementById('provider-timeout').value = 60;
+      document.getElementById('provider-retries').value = 2;
+      document.getElementById('provider-priority').value = 100;
+      document.getElementById('provider-form-heading').textContent = 'Adicionar provedor';
+      document.getElementById('save-provider').textContent = 'Salvar provedor';
+      document.getElementById('cancel-provider-edit').hidden = true;
+      document.getElementById('provider-model-options').replaceChildren();
+      setProviderDefaults();
+    }
+
+    async function removeProvider(provider) {
+      if (!window.confirm(`Remover a configuração ${provider.name}? Esta ação não pode ser desfeita.`)) return;
+      try {
+        await api.request(`/admin/settings/providers/${encodeURIComponent(provider.provider_id)}`, { method: 'DELETE' });
+        UI.showSuccess('Provedor removido.');
+        await loadSettingsPage();
+      } catch (error) {
+        UI.showError(error.message || 'Não foi possível remover o provedor.');
+      }
+    }
+
+    async function saveSystemSettings(event) {
+      event.preventDefault();
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      UI.setLoading(button, true);
+      try {
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        for (const key of Object.keys(data)) if (key !== 'tesseract_path') data[key] = Number(data[key]);
+        const result = await api.request('/admin/settings/system', { method: 'PUT', body: data });
+        renderRuntimeSettings(result);
+        setMessage(document.getElementById('system-message'), 'Configurações validadas, salvas e aplicadas.', 'success');
+      } catch (error) {
+        setMessage(document.getElementById('system-message'), error.message || 'Não foi possível salvar as configurações.', 'error');
+      } finally {
+        UI.setLoading(button, false);
+      }
+    }
+
+    async function saveFccSettings(event) {
+      event.preventDefault();
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      UI.setLoading(button, true);
+      try {
+        const result = await api.request('/admin/settings/fcc', {
+          method: 'PUT',
+          body: { base_url: document.getElementById('fcc-url').value.trim() },
+        });
+        settingsOverview.fcc = result;
+        renderFcc(result);
+        renderNvidia(providerCache);
+        setMessage(document.getElementById('fcc-message'), result.connected ? 'Endereço salvo; comunicação com FCC confirmada.' : `Endereço salvo; FCC indisponível. ${result.last_error || ''}`, result.connected ? 'success' : 'error');
+      } catch (error) {
+        setMessage(document.getElementById('fcc-message'), error.message || 'Não foi possível salvar o endereço do FCC.', 'error');
+      } finally {
+        UI.setLoading(button, false);
+      }
+    }
+
+    async function loadFccStatus() {
+      const button = document.getElementById('test-fcc');
+      UI.setLoading(button, true);
+      try {
+        const result = await api.request('/admin/settings/fcc/test', { method: 'POST' });
+        settingsOverview.fcc = result;
+        renderFcc(result);
+        renderNvidia(providerCache);
+        setMessage(document.getElementById('fcc-message'), result.connected ? 'Comunicação real com a API administrativa do FCC confirmada.' : result.last_error || 'FCC indisponível.', result.connected ? 'success' : 'error');
+      } catch (error) {
+        setMessage(document.getElementById('fcc-message'), error.message || 'Falha ao consultar o FCC.', 'error');
+      } finally {
+        UI.setLoading(button, false);
+      }
+    }
+
+    async function syncNvidia() {
+      const model = document.getElementById('fcc-nvidia-model').value;
+      if (!model || !window.confirm(`Enviar a chave NVIDIA NIM armazenada no EduGrade ao FCC e definir ${model} como modelo principal?`)) return;
+      const button = document.getElementById('sync-nvidia-fcc');
+      UI.setLoading(button, true);
+      try {
+        const result = await api.request('/admin/settings/fcc/sync/nvidia', { method: 'POST', body: { model } });
+        setMessage(document.getElementById('nvidia-message'), result.message, 'success');
+        await loadSettingsPage();
+      } catch (error) {
+        setMessage(document.getElementById('nvidia-message'), error.message || 'Não foi possível sincronizar NVIDIA NIM com FCC.', 'error');
+      } finally {
+        UI.setLoading(button, false);
+      }
+    }
+  </script>
+</body>
+</html>

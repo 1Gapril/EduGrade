@@ -1,0 +1,137 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Alembic migrations
+backend/migrations/versions/*.py
+!backend/migrations/versions/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+reports/coverage/
+.pytest_cache/
+
+# Build
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Storage (runtime files)
+storage/exams/*
+storage/processed/*
+storage/temp/*
+storage/backups/*
+!storage/exams/.gitkeep
+!storage/processed/.gitkeep
+!storage/temp/.gitkeep
+!storage/backups/.gitkeep
+
+# AI Models cache
+~/.ollama/
+~/.cache/paddleocr/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution / Packaging
+.Python
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+.nox/
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (not used but common)
+*.log
+local_settings.py
+
+# Flask stuff (not used but common)
+instance/
+.webassets-cache
+
+# Scrapy stuff (not used but common)
+.scrapy/
+
+# Sphinx documentation
+docs/_build/
+
+# pyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# type stubs
+*.pyi
+
+# Cython
+*.so
+
+# IDE specific
+.vscode/settings.json
+.vscode/launch.json
