@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal do Aluno - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .student-header {
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
+      padding: var(--space-6);
+      background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-white) 100%);
+      border-radius: var(--radius-xl);
+      margin-bottom: var(--space-6);
+    }
+    .student-avatar-large {
+      width: 100px;
+      height: 100px;
+      border-radius: var(--radius-full);
+      background: var(--color-primary);
+      color: var(--color-white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .student-info h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--color-gray-900);
+    }
+    .student-info .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      margin-top: var(--space-2);
+      color: var(--color-gray-600);
+      font-size: 0.875rem;
+    }
+    .student-info .meta span {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+    .grades-table th:nth-child(3), .grades-table td:nth-child(3) { text-align: center; }
+    .grades-table th:nth-child(4), .grades-table td:nth-child(4) { text-align: right; }
+    .grade-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-full);
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .grade-badge.approved { background: var(--color-success-light); color: var(--color-success); }
+    .grade-badge.failed { background: var(--color-danger-light); color: var(--color-danger); }
+    .grade-badge.pending { background: var(--color-warning-light); color: var(--color-warning); }
+    .exam-card {
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all var(--transition-fast);
+    }
+    .exam-card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--color-gray-300);
+    }
+    .exam-card-header {
+      padding: var(--space-4) var(--space-5);
+      background: var(--color-gray-50);
+      border-bottom: 1px solid var(--color-gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .exam-card-title {
+      font-weight: 600;
+      color: var(--color-gray-900);
+    }
+    .exam-card-date {
+      font-size: 0.75rem;
+      color: var(--color-gray-500);
+    }
+    .exam-card-body {
+      padding: var(--space-5);
+    }
+    .exam-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      margin-bottom: var(--space-4);
+      font-size: 0.875rem;
+      color: var(--color-gray-600);
+    }
+    .exam-card-meta span {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+    }
+    .exam-card-actions {
+      display: flex;
+      gap: var(--space-2);
+    }
+    .empty-state-card {
+      text-align: center;
+      padding: var(--space-10) var(--space-6);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" data-feather="graduation-cap"></div>
+        <span class="sidebar-title">EduGrade</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Meu Painel</div>
+          <a href="/aluno/dashboard.html" class="nav-item active" data-href="/aluno/dashboard.html">
+            <span data-feather="home"></span>
+            <span class="nav-item-text">Início</span>
+          </a>
+          <a href="/aluno/grades.html" class="nav-item" data-href="/aluno/grades.html">
+            <span data-feather="award"></span>
+            <span class="nav-item-text">Minhas Notas</span>
+          </a>
+          <a href="/aluno/exams.html" class="nav-item" data-href="/aluno/exams.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Minhas Provas</span>
+          </a>
+          <a href="/aluno/attendance.html" class="nav-item" data-href="/aluno/attendance.html">
+            <span data-feather="calendar"></span>
+            <span class="nav-item-text">Frequência</span>
+          </a>
+          <a href="/aluno/schedule.html" class="nav-item" data-href="/aluno/schedule.html">
+            <span data-feather="clock"></span>
+            <span class="nav-item-text">Grade Horária</span>
+          </a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Configurações</div>
+          <a href="/profile.html" class="nav-item" data-href="/profile.html">
+            <span data-feather="user"></span>
+            <span class="nav-item-text">Meu Perfil</span>
+          </a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost" id="sidebar-collapse" style="width: 100%; justify-content: center;">
+          <span data-feather="chevron-left"></span>
+          <span class="nav-item-text">Colapsar</span>
+        </button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu">
+            <span data-feather="menu"></span>
+          </button>
+          <div class="page-title-group">
+            <h1 class="page-title">Portal do Aluno</h1>
+            <p>Bem-vindo ao seu painel acadêmico</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="header-actions">
+            <button class="icon-btn" id="notifications-btn" aria-label="Notificações">
+              <span data-feather="bell"></span>
+            </button>
+          </div>
+          <div class="user-menu dropdown">
+            <button class="user-menu-btn" id="user-menu-btn">
+              <div class="user-avatar" id="user-avatar">A</div>
+              <div class="user-info">
+                <span class="user-name" id="user-name">Aluno</span>
+                <span class="user-role" id="user-role">aluno</span>
+              </div>
+            </button>
+            <div class="dropdown-menu" id="user-dropdown">
+              <a href="/profile.html" class="dropdown-item"><span data-feather="user"></span> Meu Perfil</a>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="logout-btn"><span data-feather="log-out"></span> Sair</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="page-content">
+        <!-- Student Header -->
+        <div class="student-header">
+          <div class="student-avatar-large" id="student-avatar">A</div>
+          <div class="student-info">
+            <h1 id="student-name">Nome do Aluno</h1>
+            <div class="meta">
+              <span><span data-feather="user"></span> RA: <span id="student-ra">-</span></span>
+              <span><span data-feather="book-open"></span> Curso: <span id="student-course">-</span></span>
+              <span><span data-feather="users"></span> Turma: <span id="student-class">-</span></span>
+              <span><span data-feather="calendar"></span> Período: <span id="student-period">-</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Upcoming Exams -->
+        <div class="card" id="upcoming-exams-section" style="display: none;">
+          <div class="card-header">
+            <h2 class="card-title">Próximas Provas</h2>
+          </div>
+          <div class="card-body">
+            <div id="upcoming-exams-list"></div>
+          </div>
+        </div>
+
+        <section class="card" id="study-materials-section">
+          <div class="card-header">
+            <h2 class="card-title">Materiais das minhas disciplinas</h2>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">Materiais publicados pelos professores das disciplinas em que você está matriculado.</p>
+            <div id="study-materials-list" aria-live="polite">Carregando materiais...</div>
+          </div>
+        </section>
+
+        <!-- Recent Grades -->
+        <div class="card" id="recent-grades-section" style="display: none;">
+          <div class="card-header">
+            <h2 class="card-title">Notas Recentes</h2>
+          </div>
+          <div class="card-body">
+            <div class="table-container">
+              <table class="table grades-table">
+                <thead>
+                  <tr>
+                    <th>Disciplina</th>
+                    <th>Prova</th>
+                    <th>Data</th>
+                    <th style="text-align: right;">Nota</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-grades-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendance Summary -->
+        <div class="card" id="attendance-section" style="display: none;">
+          <div class="card-header">
+            <h2 class="card-title">Resumo de Frequência</h2>
+          </div>
+          <div class="card-body" id="attendance-summary"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/main.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const authenticated = await Auth.init();
+      if (!authenticated) {
+        window.location.replace('/login.html');
+        return;
+      }
+      if (!State.hasRole('student')) {
+        window.location.replace(Auth.dashboardPath());
+        return;
+      }
+
+      Sidebar.init();
+      Sidebar.renderUserInfo();
+      await loadStudentData();
+    });
+
+    async function loadStudentData() {
+      try {
+        // Load student profile
+        const profile = await api.getProfile();
+        renderStudentHeader(profile);
+
+        // Load stats (mock for now)
+        renderStats();
+
+        // Load upcoming exams
+        await loadUpcomingExams();
+        await loadStudyMaterials();
+
+        // Load recent grades
+        await loadRecentGrades();
+
+        // Load attendance
+        await loadAttendance();
+      } catch (error) {
+        UI.showError('Erro ao carregar dados do aluno');
+      }
+    }
+
+    function renderStudentHeader(profile) {
+      document.getElementById('student-name').textContent = profile.name || profile.username;
+      document.getElementById('student-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
+      document.getElementById('student-ra').textContent = profile.ra || 'Não informado';
+      document.getElementById('student-course').textContent = profile.course?.name || 'Não vinculado';
+      document.getElementById('student-class').textContent = profile.class?.name || 'Não vinculado';
+      document.getElementById('student-period').textContent = profile.currentPeriod?.name || 'Não informado';
+    }
+
+    function renderStats() {
+      const stats = [
+        { label: 'Provas Agendadas', value: '3', icon: 'file-text', color: 'primary' },
+        { label: 'Média Geral', value: '8.5', icon: 'award', color: 'success' },
+        { label: 'Frequência', value: '92%', icon: 'calendar', color: 'warning' },
+        { label: 'Disciplinas', value: '6', icon: 'book-open', color: 'info' },
+      ];
+
+      document.getElementById('stats-grid').innerHTML = stats.map(s => `
+        <div class="stat-card">
+          <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
+          <div class="stat-content">
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    async function loadUpcomingExams() {
+      // Mock data - replace with real API call
+      const exams = [
+        { id: '1', subject: 'Cálculo I', title: 'Prova 1 - Limites e Derivadas', date: '2026-11-15T14:00:00', location: 'Sala 101', status: 'scheduled' },
+        { id: '2', subject: 'Física II', title: 'Prova 2 - Eletromagnetismo', date: '2026-11-20T09:00:00', location: 'Lab 3', status: 'scheduled' },
+        { id: '3', subject: 'Programação', title: 'Projeto Final - Entrega', date: '2026-11-25T23:59:00', location: 'Online', status: 'scheduled' },
+      ];
+
+      if (exams.length === 0) {
+        return;
+      }
+
+      document.getElementById('upcoming-exams-section').style.display = 'block';
+      document.getElementById('upcoming-exams-list').innerHTML = exams.map(exam => `
+        <div class="exam-card">
+          <div class="exam-card-header">
+            <span class="exam-card-title">${UI.escapeHtml(exam.subject)}: ${UI.escapeHtml(exam.title)}</span>
+            <span class="exam-card-date">${UI.formatDateTime(exam.date)}</span>
+          </div>
+          <div class="exam-card-body">
+            <div class="exam-card-meta">
+              <span><span data-feather="map-pin"></span> ${UI.escapeHtml(exam.location)}</span>
+              <span><span data-feather="clock"></span> ${UI.formatDateTime(exam.date)}</span>
+            </div>
+            <div class="exam-card-actions">
+              <button class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Ver Detalhes</button>
+              <button class="btn btn-primary btn-sm"><span data-feather="download"></span> Material de Estudo</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    async function loadStudyMaterials() {
+      const list = document.getElementById('study-materials-list');
+      try {
+        const materials = await api.request('/materials/student');
+        list.replaceChildren();
+        if (!materials.length) {
+          list.textContent = 'Ainda não há materiais publicados para suas disciplinas.';
+          return;
+        }
+
+        materials.forEach(material => {
+          const card = document.createElement('article');
+          card.className = 'exam-card';
+
+          const header = document.createElement('div');
+          header.className = 'exam-card-header';
+          const title = document.createElement('span');
+          title.className = 'exam-card-title';
+          title.textContent = `${material.subject_name} — ${material.title}`;
+          const date = document.createElement('span');
+          date.className = 'exam-card-date';
+          date.textContent = UI.formatDate(material.created_at);
+          header.append(title, date);
+
+          const body = document.createElement('div');
+          body.className = 'exam-card-body';
+          const details = document.createElement('details');
+          const summary = document.createElement('summary');
+          summary.className = 'btn btn-secondary btn-sm';
+          summary.textContent = 'Ver detalhes';
+          const description = document.createElement('p');
+          description.textContent = material.description || 'Sem descrição adicional.';
+          details.append(summary, description);
+
+          const actions = document.createElement('div');
+          actions.className = 'exam-card-actions';
+          const download = document.createElement('button');
+          download.type = 'button';
+          download.className = 'btn btn-primary btn-sm';
+          download.textContent = `Baixar ${material.original_filename}`;
+          download.addEventListener('click', async () => {
+            download.disabled = true;
+            try {
+              await api.download(
+                `/materials/${material.id}/download`,
+                material.original_filename,
+              );
+            } catch (error) {
+              UI.showError(error.message || 'Não foi possível baixar o material.');
+            } finally {
+              download.disabled = false;
+            }
+          });
+          actions.append(download);
+          body.append(details, actions);
+          card.append(header, body);
+          list.append(card);
+        });
+      } catch (error) {
+        list.textContent = error.message || 'Não foi possível carregar os materiais.';
+      }
+    }
+
+    async function loadRecentGrades() {
+      // Mock data
+      const grades = [
+        { subject: 'Cálculo I', exam: 'Prova 1 - Limites', date: '2026-10-15', grade: 9.0, status: 'approved' },
+        { subject: 'Física II', exam: 'Prova 1 - Mecânica', date: '2026-10-10', grade: 7.5, status: 'approved' },
+        { subject: 'Programação', exam: 'Projeto 1 - Algoritmos', date: '2026-10-05', grade: 8.5, status: 'approved' },
+        { subject: 'Álgebra Linear', exam: 'Prova 1 - Matrizes', date: '2026-11-01', grade: null, status: 'pending' },
+      ];
+
+      document.getElementById('recent-grades-section').style.display = 'block';
+      document.getElementById('recent-grades-body').innerHTML = grades.map(g => `
+        <tr>
+          <td>${UI.escapeHtml(g.subject)}</td>
+          <td>${UI.escapeHtml(g.exam)}</td>
+          <td style="text-align: center;">${UI.formatDate(g.date)}</td>
+          <td style="text-align: right;">
+            ${g.grade !== null ? `<span class="grade-badge ${g.status}">${UI.formatNumber(g.grade, 1)}</span>` : '<span class="text-muted">Aguardando</span>'}
+          </td>
+          <td>
+            <span class="badge-status ${g.status === 'approved' ? 'success' : g.status === 'failed' ? 'danger' : 'warning'}">
+              ${g.status === 'approved' ? 'Aprovado' : g.status === 'failed' ? 'Reprovado' : 'Pendente'}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadAttendance() {
+      // Mock data
+      const attendance = [
+        { subject: 'Cálculo I', attended: 18, total: 20, percentage: 90 },
+        { subject: 'Física II', attended: 19, total: 20, percentage: 95 },
+        { subject: 'Programação', attended: 17, total: 20, percentage: 85 },
+        { subject: 'Álgebra Linear', attended: 16, total: 18, percentage: 89 },
+      ];
+
+      document.getElementById('attendance-section').style.display = 'block';
+      document.getElementById('attendance-summary').innerHTML = `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Disciplina</th>
+                <th>Presenças</th>
+                <th>Total</th>
+                <th>Percentual</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${attendance.map(a => `
+                <tr>
+                  <td>${UI.escapeHtml(a.subject)}</td>
+                  <td>${a.attended}</td>
+                  <td>${a.total}</td>
+                  <td>
+                    <div class="progress" style="width: 150px;">
+                      <div class="progress-bar ${a.percentage >= 75 ? 'success' : a.percentage >= 50 ? 'warning' : 'danger'}" style="width: ${a.percentage}%"></div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-status ${a.percentage >= 75 ? 'success' : a.percentage >= 50 ? 'warning' : 'danger'}">
+                      ${a.percentage >= 75 ? 'Regular' : a.percentage >= 50 ? 'Atenção' : 'Crítico'}
+                    </span>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduGrade</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    .workspace {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: var(--space-8) var(--space-4);
+    }
+    .workspace-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+      flex-wrap: wrap;
+    }
+    .workspace-header h1 {
+      font-size: 1.5rem;
+      color: var(--color-gray-900);
+    }
+    .workspace-header p {
+      margin-top: var(--space-2);
+      color: var(--color-gray-500);
+    }
+    .workspace-actions {
+      display: flex;
+      gap: var(--space-2);
+    }
+    .workspace-message {
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      background: var(--color-info-light);
+      color: var(--color-gray-800);
+      margin-bottom: var(--space-4);
+    }
+    .workspace-error {
+      background: var(--color-danger-light);
+      color: var(--color-danger);
+    }
+    .workspace-table-wrap {
+      overflow-x: auto;
+    }
+    .workspace table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .workspace th,
+    .workspace td {
+      padding: var(--space-3);
+      border-bottom: 1px solid var(--color-gray-200);
+      text-align: left;
+      vertical-align: top;
+    }
+    .workspace th {
+      color: var(--color-gray-600);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+    .workspace-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+      align-items: end;
+    }
+    .workspace-form .form-group {
+      margin-bottom: 0;
+    }
+    .workspace-form-actions {
+      display: flex;
+      gap: var(--space-2);
+      align-items: end;
+      flex-wrap: wrap;
+    }
+    .workspace-exam-form > .form-group,
+    .workspace-print-options,
+    .workspace-question-list,
+    .workspace-exam-actions {
+      grid-column: 1 / -1;
+    }
+    .workspace-question-heading,
+    .workspace-question-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-4);
+      align-items: end;
+    }
+    .workspace-question-heading {
+      grid-template-columns: 1fr auto;
+      margin-bottom: var(--space-4);
+      align-items: center;
+    }
+    .workspace-question-heading p,
+    .workspace-published > p {
+      color: var(--color-gray-500);
+      margin-top: var(--space-1);
+    }
+    .workspace-question-card,
+    .workspace-print-options {
+      min-width: 0;
+      padding: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .workspace-question-card {
+      margin-bottom: var(--space-4);
+    }
+    .workspace-question-card legend,
+    .workspace-print-options legend {
+      padding: 0 var(--space-2);
+      color: var(--color-gray-800);
+      font-weight: 600;
+    }
+    .workspace-question-statement,
+    .workspace-question-options,
+    .workspace-question-expected,
+    .workspace-question-accepted,
+    .workspace-question-justification,
+    .workspace-question-card .workspace-form-actions {
+      grid-column: 1 / -1;
+    }
+    .workspace-question-options[hidden],
+    .workspace-question-expected[hidden] {
+      display: none;
+    }
+    .workspace-question-alternatives {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-3);
+      margin: var(--space-2) 0 var(--space-4);
+    }
+    .workspace-alternative {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .workspace-alternative > span {
+      color: var(--color-gray-600);
+      font-weight: 600;
+    }
+    .workspace-checkbox {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) 0;
+    }
+    .workspace-copy-count {
+      display: grid;
+      gap: var(--space-1);
+      min-width: 150px;
+    }
+    .workspace-published {
+      display: grid;
+      gap: var(--space-4);
+      margin-top: var(--space-6);
+      padding: var(--space-5);
+    }
+    .workspace-print-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+    .workspace-print-files a {
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-primary-light);
+      border-radius: var(--radius-md);
+    }
+    .workspace-published h3 {
+      margin-top: var(--space-3);
+    }
+    @media (max-width: 600px) {
+      .workspace-question-heading {
+        grid-template-columns: 1fr;
+      }
+    }
+    .workspace-user-actions {
+      display: flex;
+      gap: var(--space-2);
+      white-space: nowrap;
+    }
+    .workspace-user-status {
+      font-weight: 600;
+    }
+    .workspace-user-status.inactive {
+      color: var(--color-danger);
+    }
+    .workspace-self-label {
+      color: var(--color-gray-500);
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="workspace-header">
+      <div>
+        <h1 id="workspace-title">Carregando tela...</h1>
+        <p id="workspace-description">Aguarde enquanto os dados são carregados.</p>
+      </div>
+      <div class="workspace-actions">
+        <a class="btn btn-secondary" id="workspace-home" href="/dashboard.html">Meu painel</a>
+        <button class="btn btn-ghost" id="workspace-logout" type="button">Sair</button>
+      </div>
+    </header>
+    <div id="workspace-message" class="workspace-message" role="status" hidden></div>
+    <section class="card">
+      <div class="card-body" id="workspace-content" aria-live="polite">
+        Carregando...
+      </div>
+    </section>
+  </main>
+  <script src="/js/main.js"></script>
+  <script src="/js/workspace.js"></script>
+</body>
+</html>

@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal do Professor - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .teacher-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+      padding: var(--space-6);
+      background: linear-gradient(135deg, var(--color-success-light) 0%, var(--color-white) 100%);
+      border-radius: var(--radius-xl);
+      margin-bottom: var(--space-6);
+    }
+    .teacher-info h1 { font-size: 1.5rem; font-weight: 700; color: var(--color-gray-900); }
+    .teacher-info .meta { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-2); color: var(--color-gray-600); font-size: 0.875rem; }
+    .teacher-info .meta span { display: flex; align-items: center; gap: var(--space-1); }
+    .teacher-actions { display: flex; gap: var(--space-2); }
+    .class-card {
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all var(--transition-fast);
+    }
+    .class-card:hover { box-shadow: var(--shadow-md); border-color: var(--color-gray-300); }
+    .class-card-header { padding: var(--space-4) var(--space-5); background: var(--color-gray-50); border-bottom: 1px solid var(--color-gray-200); display: flex; align-items: center; justify-content: space-between; }
+    .class-card-title { font-weight: 600; color: var(--color-gray-900); }
+    .class-card-subject { font-size: 0.875rem; color: var(--color-gray-500); }
+    .class-card-body { padding: var(--space-5); }
+    .class-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-4); font-size: 0.875rem; color: var(--color-gray-600); }
+    .class-card-meta span { display: flex; align-items: center; gap: var(--space-1); }
+    .class-card-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .pending-corrections-banner {
+      background: var(--color-warning-light);
+      border: 1px solid var(--color-warning);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4) var(--space-5);
+      margin-bottom: var(--space-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+    .pending-corrections-banner .info { display: flex; align-items: center; gap: var(--space-3); }
+    .pending-corrections-banner .count { font-size: 2rem; font-weight: 700; color: var(--color-warning); }
+    .pending-corrections-banner .text h3 { font-size: 1rem; font-weight: 600; color: var(--color-gray-900); }
+    .pending-corrections-banner .text p { font-size: 0.875rem; color: var(--color-gray-600); }
+    .exam-card .exam-card-header { display: flex; align-items: center; justify-content: space-between; }
+    .exam-status { padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 500; }
+    .exam-status.draft { background: var(--color-gray-100); color: var(--color-gray-600); }
+    .exam-status.published { background: var(--color-primary-light); color: var(--color-primary); }
+    .exam-status.grading { background: var(--color-warning-light); color: var(--color-warning); }
+    .exam-status.completed { background: var(--color-success-light); color: var(--color-success); }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" data-feather="graduation-cap"></div>
+        <span class="sidebar-title">EduGrade</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Meu Painel</div>
+          <a href="/professor/dashboard.html" class="nav-item active" data-href="/professor/dashboard.html">
+            <span data-feather="home"></span>
+            <span class="nav-item-text">Início</span>
+          </a>
+          <a href="/professor/classes.html" class="nav-item" data-href="/professor/classes.html">
+            <span data-feather="users"></span>
+            <span class="nav-item-text">Minhas Turmas</span>
+          </a>
+          <a href="/professor/exams.html" class="nav-item" data-href="/professor/exams.html">
+            <span data-feather="file-text"></span>
+            <span class="nav-item-text">Minhas Provas</span>
+          </a>
+          <a href="/professor/corrections.html" class="nav-item" data-href="/professor/corrections.html">
+            <span data-feather="check-circle"></span>
+            <span class="nav-item-text">Correções Pendentes</span>
+          </a>
+          <a href="/professor/grades.html" class="nav-item" data-href="/professor/grades.html">
+            <span data-feather="award"></span>
+            <span class="nav-item-text">Lançar Notas</span>
+          </a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Ferramentas</div>
+          <a href="/correcao-lote.html" class="nav-item" data-href="/correcao-lote.html">
+            <span data-feather="upload"></span>
+            <span class="nav-item-text">Correção em Lote</span>
+          </a>
+          <a href="/exams/create.html" class="nav-item" data-href="/exams/create.html">
+            <span data-feather="plus"></span>
+            <span class="nav-item-text">Criar Prova</span>
+          </a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Configurações</div>
+          <a href="/profile.html" class="nav-item" data-href="/profile.html">
+            <span data-feather="user"></span>
+            <span class="nav-item-text">Meu Perfil</span>
+          </a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost" id="sidebar-collapse" style="width: 100%; justify-content: center;">
+          <span data-feather="chevron-left"></span>
+          <span class="nav-item-text">Colapsar</span>
+        </button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <main class="main-content">
+      <header class="header">
+        <div class="header-left">
+          <button class="icon-btn sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu">
+            <span data-feather="menu"></span>
+          </button>
+          <div class="page-title-group">
+            <h1 class="page-title">Portal do Professor</h1>
+            <p>Gerencie suas turmas, provas e correções</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="header-actions">
+            <button class="icon-btn" id="notifications-btn" aria-label="Notificações">
+              <span data-feather="bell"></span>
+              <span class="badge" id="notification-badge" style="display: none;">3</span>
+            </button>
+          </div>
+          <div class="user-menu dropdown">
+            <button class="user-menu-btn" id="user-menu-btn">
+              <div class="user-avatar" id="user-avatar">P</div>
+              <div class="user-info">
+                <span class="user-name" id="user-name">Professor</span>
+                <span class="user-role" id="user-role">professor</span>
+              </div>
+            </button>
+            <div class="dropdown-menu" id="user-dropdown">
+              <a href="/profile.html" class="dropdown-item"><span data-feather="user"></span> Meu Perfil</a>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="logout-btn"><span data-feather="log-out"></span> Sair</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="page-content">
+        <!-- Teacher Header -->
+        <div class="teacher-header">
+          <div class="teacher-info">
+            <h1 id="teacher-name">Nome do Professor</h1>
+            <div class="meta">
+              <span><span data-feather="user"></span> Matrícula: <span id="teacher-registration">-</span></span>
+              <span><span data-feather="book-open"></span> Disciplinas: <span id="teacher-subjects">-</span></span>
+              <span><span data-feather="users"></span> Turmas: <span id="teacher-classes">-</span></span>
+            </div>
+          </div>
+          <div class="teacher-actions">
+            <a href="/exams/create.html" class="btn btn-primary"><span data-feather="plus"></span> Nova Prova</a>
+            <a href="/correcao-lote.html" class="btn btn-success"><span data-feather="upload"></span> Correção em Lote</a>
+          </div>
+        </div>
+
+        <!-- Pending Corrections Banner -->
+        <div class="pending-corrections-banner" id="pending-banner" style="display: none;">
+          <div class="info">
+            <div class="count" id="pending-count">0</div>
+            <div class="text">
+              <h3>Correções Pendentes de Revisão</h3>
+              <p>Provas corrigidas pela IA aguardando sua aprovação</p>
+            </div>
+          </div>
+          <a href="/professor/corrections.html" class="btn btn-warning"><span data-feather="check-circle"></span> Revisar Agora</a>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- My Classes -->
+        <div class="card" id="my-classes-section" style="display: none;">
+          <div class="card-header">
+            <h2 class="card-title">Minhas Turmas</h2>
+            <a href="/professor/classes.html" class="btn btn-ghost btn-sm">Ver todas</a>
+          </div>
+          <div class="card-body" id="my-classes-list"></div>
+        </div>
+
+        <!-- My Exams -->
+        <div class="card" id="my-exams-section" style="display: none;">
+          <div class="card-header">
+            <h2 class="card-title">Minhas Provas Recentes</h2>
+            <a href="/professor/exams.html" class="btn btn-ghost btn-sm">Ver todas</a>
+          </div>
+          <div class="card-body" id="my-exams-list"></div>
+        </div>
+
+        <section class="card" id="teacher-materials-section">
+          <div class="card-header">
+            <h2 class="card-title">Materiais das disciplinas</h2>
+          </div>
+          <div class="card-body">
+            <p class="text-muted">
+              Publique arquivos apenas nas disciplinas atribuídas pelo administrador.
+            </p>
+            <form id="teacher-material-form" class="workspace-form">
+              <div class="form-group">
+                <label class="form-label" for="material-subject">Disciplina</label>
+                <select class="form-input" id="material-subject" name="subject_id" required>
+                  <option value="">Carregando disciplinas...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="material-title">Título</label>
+                <input class="form-input" id="material-title" name="title" maxlength="255" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="material-description">Descrição</label>
+                <textarea class="form-input" id="material-description" name="description" rows="3" maxlength="5000"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="material-file">Arquivo</label>
+                <input class="form-input" id="material-file" name="file" type="file"
+                  accept=".pdf,.docx,.pptx,.xlsx,.txt,.png,.jpg,.jpeg" required>
+              </div>
+              <div class="workspace-form-actions">
+                <button class="btn btn-primary" id="publish-material-button" type="submit">Publicar material</button>
+                <p id="teacher-material-message" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+            <div id="teacher-material-list" aria-live="polite">Carregando materiais...</div>
+          </div>
+        </section>
+
+        <!-- Quick Actions -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Ações Rápidas</h2>
+          </div>
+          <div class="card-body">
+            <div class="quick-actions">
+              <a href="/exams/create.html" class="quick-action-btn">
+                <span data-feather="plus"></span>
+                <span>Criar Nova Prova</span>
+              </a>
+              <a href="/correcao-lote.html" class="quick-action-btn">
+                <span data-feather="upload"></span>
+                <span>Correção em Lote</span>
+              </a>
+              <a href="/professor/grades.html" class="quick-action-btn">
+                <span data-feather="edit"></span>
+                <span>Lançar Notas</span>
+              </a>
+              <a href="/professor/corrections.html" class="quick-action-btn">
+                <span data-feather="check-circle"></span>
+                <span>Revisar Correções IA</span>
+              </a>
+              <a href="/exams/print.html" class="quick-action-btn">
+                <span data-feather="printer"></span>
+                <span>Imprimir Provas</span>
+              </a>
+              <a href="/admin/audit.html" class="quick-action-btn">
+                <span data-feather="file-text"></span>
+                <span>Ver Auditoria</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/main.js"></script>
+  <script>
+    let teacherCanPublishMaterials = false;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const authenticated = await Auth.init();
+      if (!authenticated) {
+        window.location.replace('/login.html');
+        return;
+      }
+      if (!State.hasRole('teacher')) {
+        window.location.replace(Auth.dashboardPath());
+        return;
+      }
+
+      Sidebar.init();
+      Sidebar.renderUserInfo();
+      await loadTeacherData();
+    });
+
+    async function loadTeacherData() {
+      try {
+        const profile = await api.getProfile();
+        renderTeacherHeader(profile);
+        renderStats();
+        await loadMyClasses();
+        await loadMyExams();
+        await loadPendingCorrections();
+        await loadTeacherMaterials();
+      } catch (error) {
+        UI.showError('Erro ao carregar dados do professor');
+      }
+    }
+
+    function renderTeacherHeader(profile) {
+      document.getElementById('teacher-name').textContent = profile.name || profile.username;
+      document.getElementById('teacher-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
+      document.getElementById('teacher-registration').textContent = profile.registration || 'Não informado';
+      document.getElementById('teacher-subjects').textContent = profile.subjects?.length || '0';
+      document.getElementById('teacher-classes').textContent = profile.classes?.length || '0';
+    }
+
+    function renderStats() {
+      const stats = [
+        { label: 'Turmas Ativas', value: '4', icon: 'users', color: 'primary' },
+        { label: 'Provas Este Mês', value: '3', icon: 'file-text', color: 'info' },
+        { label: 'Pendentes Revisão', value: '7', icon: 'alert-triangle', color: 'warning' },
+        { label: 'Alunos Totais', value: '128', icon: 'user', color: 'success' },
+      ];
+
+      document.getElementById('stats-grid').innerHTML = stats.map(s => `
+        <div class="stat-card">
+          <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
+          <div class="stat-content">
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    async function loadMyClasses() {
+      // Mock data
+      const classes = [
+        { id: '1', name: 'Turma A - 2026/2', subject: 'Cálculo I', students: 32, schedule: 'Seg/Qua 14:00-16:00', room: 'Sala 101' },
+        { id: '2', name: 'Turma B - 2026/2', subject: 'Cálculo I', students: 28, schedule: 'Ter/Qui 10:00-12:00', room: 'Sala 102' },
+        { id: '3', name: 'Turma A - 2026/2', subject: 'Física II', students: 25, schedule: 'Seg/Qua 16:00-18:00', room: 'Lab 2' },
+        { id: '4', name: 'Turma C - 2026/2', subject: 'Programação', students: 30, schedule: 'Sex 08:00-12:00', room: 'Lab 1' },
+      ];
+
+      document.getElementById('my-classes-section').style.display = 'block';
+      document.getElementById('my-classes-list').innerHTML = classes.map(c => `
+        <div class="class-card">
+          <div class="class-card-header">
+            <div>
+              <div class="class-card-title">${UI.escapeHtml(c.name)}</div>
+              <div class="class-card-subject">${UI.escapeHtml(c.subject)}</div>
+            </div>
+          </div>
+          <div class="class-card-body">
+            <div class="class-card-meta">
+              <span><span data-feather="users"></span> ${c.students} alunos</span>
+              <span><span data-feather="calendar"></span> ${UI.escapeHtml(c.schedule)}</span>
+              <span><span data-feather="map-pin"></span> ${UI.escapeHtml(c.room)}</span>
+            </div>
+            <div class="class-card-actions">
+              <a href="/professor/class-detail.html?id=${c.id}" class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Ver Turma</a>
+              <a href="/professor/grades.html?class=${c.id}" class="btn btn-primary btn-sm"><span data-feather="edit"></span> Lançar Notas</a>
+              <a href="/correcao-lote.html?class=${c.id}" class="btn btn-success btn-sm"><span data-feather="upload"></span> Correção Lote</a>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    async function loadMyExams() {
+      // Mock data
+      const exams = [
+        { id: '1', subject: 'Cálculo I', title: 'Prova 1 - Limites e Derivadas', date: '2026-11-15', status: 'published', submissions: 58, graded: 45 },
+        { id: '2', subject: 'Física II', title: 'Prova 2 - Eletromagnetismo', date: '2026-11-20', status: 'draft', submissions: 0, graded: 0 },
+        { id: '3', subject: 'Programação', title: 'Projeto Final', date: '2026-11-25', status: 'grading', submissions: 28, graded: 12 },
+        { id: '4', subject: 'Álgebra Linear', title: 'Prova 1 - Matrizes', date: '2026-10-10', status: 'completed', submissions: 30, graded: 30 },
+      ];
+
+      document.getElementById('my-exams-section').style.display = 'block';
+      document.getElementById('my-exams-list').innerHTML = exams.map(e => `
+        <div class="exam-card">
+          <div class="exam-card-header">
+            <div style="flex: 1;">
+              <div class="exam-card-title">${UI.escapeHtml(e.subject)}: ${UI.escapeHtml(e.title)}</div>
+              <div class="exam-card-meta">
+                <span><span data-feather="calendar"></span> ${UI.formatDate(e.date)}</span>
+                <span><span data-feather="users"></span> ${e.submissions} submissões</span>
+                <span><span data-feather="check-circle"></span> ${e.graded} corrigidas</span>
+              </div>
+            </div>
+            <span class="exam-status ${e.status}">${getStatusLabel(e.status)}</span>
+          </div>
+          <div class="exam-card-body">
+            <div class="exam-card-actions">
+              <a href="/exams/detail.html?id=${e.id}" class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Detalhes</a>
+              ${e.status === 'published' || e.status === 'grading' ? `<a href="/professor/corrections.html?exam=${e.id}" class="btn btn-primary btn-sm"><span data-feather="check-circle"></span> Corrigir</a>` : ''}
+              ${e.status === 'draft' ? `<a href="/exams/edit.html?id=${e.id}" class="btn btn-primary btn-sm"><span data-feather="edit"></span> Editar</a>` : ''}
+              <a href="/exams/print.html?exam=${e.id}" class="btn btn-ghost btn-sm"><span data-feather="printer"></span> Imprimir</a>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      feather.replace();
+    }
+
+    function getStatusLabel(status) {
+      const labels = { draft: 'Rascunho', published: 'Publicada', grading: 'Em Correção', completed: 'Concluída' };
+      return labels[status] || status;
+    }
+
+    async function loadPendingCorrections() {
+      // Mock - replace with real API
+      const pendingCount = 7;
+      if (pendingCount > 0) {
+        document.getElementById('pending-banner').style.display = 'flex';
+        document.getElementById('pending-count').textContent = pendingCount;
+      }
+    }
+
+    async function loadTeacherMaterials() {
+      const subjectSelect = document.getElementById('material-subject');
+      const message = document.getElementById('teacher-material-message');
+      const list = document.getElementById('teacher-material-list');
+      const publishButton = document.getElementById('publish-material-button');
+
+      try {
+        const [subjects, materials] = await Promise.all([
+          api.request('/materials/teacher/subjects'),
+          api.request('/materials/teacher'),
+        ]);
+        subjectSelect.replaceChildren();
+        if (!subjects.length) {
+          teacherCanPublishMaterials = false;
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'Nenhuma disciplina atribuída pelo administrador';
+          subjectSelect.append(option);
+          subjectSelect.disabled = true;
+          publishButton.disabled = true;
+          message.textContent = 'Peça ao administrador para vincular seu cadastro à disciplina.';
+        } else {
+          teacherCanPublishMaterials = true;
+          subjectSelect.disabled = false;
+          publishButton.disabled = false;
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = 'Selecione a disciplina';
+          subjectSelect.append(placeholder);
+          subjects.forEach(subject => {
+            const option = document.createElement('option');
+            option.value = subject.id;
+            option.textContent = subject.name;
+            subjectSelect.append(option);
+          });
+        }
+        renderTeacherMaterials(materials);
+      } catch (error) {
+        teacherCanPublishMaterials = false;
+        message.textContent = error.message || 'Não foi possível carregar as disciplinas e materiais.';
+        list.textContent = 'Tente atualizar o painel mais tarde.';
+        publishButton.disabled = true;
+      }
+    }
+
+    function renderTeacherMaterials(materials) {
+      const list = document.getElementById('teacher-material-list');
+      list.replaceChildren();
+      if (!materials.length) {
+        list.textContent = 'Você ainda não publicou materiais.';
+        return;
+      }
+
+      materials.forEach(material => {
+        const card = document.createElement('article');
+        card.className = 'exam-card';
+        const header = document.createElement('div');
+        header.className = 'exam-card-header';
+        const title = document.createElement('span');
+        title.className = 'exam-card-title';
+        title.textContent = `${material.subject_name} — ${material.title}`;
+        const date = document.createElement('span');
+        date.className = 'exam-card-date';
+        date.textContent = UI.formatDate(material.created_at);
+        header.append(title, date);
+
+        const body = document.createElement('div');
+        body.className = 'exam-card-body';
+        const description = document.createElement('p');
+        description.textContent = material.description || 'Sem descrição adicional.';
+        const download = document.createElement('button');
+        download.type = 'button';
+        download.className = 'btn btn-secondary btn-sm';
+        download.textContent = `Baixar ${material.original_filename}`;
+        download.addEventListener('click', async () => {
+          download.disabled = true;
+          try {
+            await api.download(
+              `/materials/${material.id}/download`,
+              material.original_filename,
+            );
+          } catch (error) {
+            UI.showError(error.message || 'Não foi possível baixar o material.');
+          } finally {
+            download.disabled = false;
+          }
+        });
+        body.append(description, download);
+        card.append(header, body);
+        list.append(card);
+      });
+    }
+
+    document.getElementById('teacher-material-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = document.getElementById('publish-material-button');
+      const message = document.getElementById('teacher-material-message');
+      message.textContent = '';
+      UI.setLoading(button, true);
+      try {
+        await api.request('/materials', {
+          method: 'POST',
+          body: new FormData(form),
+        });
+        form.reset();
+        message.textContent = 'Material publicado para os alunos matriculados na disciplina.';
+        await loadTeacherMaterials();
+      } catch (error) {
+        message.textContent = error.message || 'Não foi possível publicar o material.';
+      } finally {
+        UI.setLoading(button, false);
+        button.disabled = !teacherCanPublishMaterials;
+      }
+    });
+  </script>
+</body>
+</html>
