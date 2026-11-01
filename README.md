@@ -120,13 +120,10 @@ python -m uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 
 Acesse: **http://localhost:8000** → redireciona para o login automaticamente
 
-**Usuários de demonstração criados automaticamente:**
-
-| Perfil | Usuário | Senha |
-|---|---|---|
-| Administrador | `admin` | `admin123` |
-| Professor | `professor` | `prof123` |
-| Aluno | `aluno` | `aluno123` |
+O seed atual inclui contas e registros demonstrativos para desenvolvimento.
+Não use essas contas em produção; crie usuários com credenciais próprias e
+confirme que o banco apontado por `DATABASE_URL` é descartável antes de executar
+testes ou popular dados.
 
 ---
 
@@ -198,13 +195,16 @@ EduGrade/
 | Documento | Descrição |
 |-----------|-----------|
 | [SETUP.md](SETUP.md) | Guia completo de instalação e configuração |
-| [COMO_RODAR.md](COMO_RODAR.md) | Passo a passo para rodar no CMD |
+| [como_rodar.md](como_rodar.md) | Passo a passo para rodar no CMD |
 | [INSTALAR_OCR_WINDOWS.md](INSTALAR_OCR_WINDOWS.md) | Instalação do Tesseract e idioma português para OCR no Windows |
 | [docs/CONFIGURACOES_CENTRAL.md](docs/CONFIGURACOES_CENTRAL.md) | Central administrativa de provedores e configurações |
 | [docs/INTEGRACAO_FCC.md](docs/INTEGRACAO_FCC.md) | Integração verificada com a API administrativa FCC |
 | [docs/INTEGRACAO_NVIDIA_NIM.md](docs/INTEGRACAO_NVIDIA_NIM.md) | Cadastro e validação da NVIDIA NIM |
 | [docs/SEGURANCA_CREDENCIAIS.md](docs/SEGURANCA_CREDENCIAIS.md) | Bootstrap e proteção de chaves de API |
 | [docs/QA/TESTES_CONFIGURACOES.md](docs/QA/TESTES_CONFIGURACOES.md) | Evidências e limites dos testes da central |
+| [docs/QA/INVENTARIO_FUNCIONALIDADES.md](docs/QA/INVENTARIO_FUNCIONALIDADES.md) | Inventário funcional e estado da auditoria |
+| [docs/QA/MATRIZ_DE_TESTES.md](docs/QA/MATRIZ_DE_TESTES.md) | Casos e resultados de testes |
+| [docs/QA/RELATORIO_FINAL.md](docs/QA/RELATORIO_FINAL.md) | Resultado consolidado e bloqueios da auditoria |
 | [API Docs](http://localhost:8000/docs) | Swagger UI (após iniciar o servidor) |
 | [ReDoc](http://localhost:8000/redoc) | Documentação alternativa ReDoc |
 
@@ -347,7 +347,7 @@ Este projeto está licenciado sob a **MIT License** — veja o arquivo [LICENSE]
 **Desenvolvedor**: Fernando
 - GitHub: [@fernando](https://github.com/fernando)
 
-**Projeto**: [Repositório EduGrade](https://github.com/usuario/edugrade)
+**Projeto**: [Repositório EduGrade](https://github.com/1Gapril/EduGrade)
 
 ---
 

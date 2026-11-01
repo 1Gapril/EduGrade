@@ -1,6 +1,6 @@
 # EduGrade — Guia de Configuração e Execução
 
-> Para o guia rápido de como rodar no CMD, veja também o [COMO_RODAR.md](COMO_RODAR.md).
+> Para o guia rápido de como rodar no CMD, veja também [como_rodar.md](como_rodar.md).
 
 ---
 
@@ -171,11 +171,9 @@ docker run -d -p 8000:8000 --env-file .env edugrade
 
 ### Usuários de Demonstração (criados automaticamente)
 
-| Perfil | Usuário | Senha |
-|--------|---------|-------|
-| Administrador | `admin` | `admin123` |
-| Professor | `professor` | `prof123` |
-| Aluno | `aluno` | `aluno123` |
+O seed contém contas e registros demonstrativos para desenvolvimento. Não
+considere essas contas credenciais administrativas próprias e nunca use o seed
+em um banco com dados reais.
 
 ---
 
@@ -305,14 +303,10 @@ black backend\app\
 ruff check backend\app\
 ```
 
-### Limpeza
+### Limpeza segura
 
 **Windows (CMD):**
 ```cmd
-:: Remover banco SQLite e recriar
-del backend\edugrade.db
-python scripts\seed_db.py
-
 :: Remover cache Python (PowerShell)
 Get-ChildItem -Recurse -Directory -Name "__pycache__" | Remove-Item -Recurse -Force
 ```
@@ -323,9 +317,19 @@ Get-ChildItem -Recurse -Directory -Name "__pycache__" | Remove-Item -Recurse -Fo
 find . -type d -name "__pycache__" -exec rm -rf {} +
 find . -type f -name "*.pyc" -delete
 
-# Remover banco SQLite
-rm backend/edugrade.db
+# Não remova o banco para "resetar" o sistema: isso apaga dados.
 ```
+
+Para testar o seed sem tocar no banco existente, use um arquivo SQLite novo e
+explicitamente descartável. No PowerShell, antes de iniciar o servidor:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///./DADO_DE_TESTE_EDUGRADE.db"
+.\venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8001
+```
+
+Esse banco contém apenas dados de teste. Não aponte `DATABASE_URL` para um banco
+com dados reais ao executar o seed, testes ou comandos de inicialização.
 
 ---
 
@@ -386,10 +390,11 @@ Ou use o **CMD** puro em vez do PowerShell.
 ### Banco de dados vazio (usuários não existem)
 **Causa:** O banco foi criado antes do seed automático.
 ```cmd
-del backend\edugrade.db
 python -m uvicorn backend.app.main:app --reload
 ```
-Os usuários de demonstração são inseridos automaticamente quando o banco está vazio.
+Antes de iniciar, confirme que `DATABASE_URL` aponta para o banco correto. Não
+apague nem recrie um banco existente para corrigir esse problema; faça backup e
+investigue a inicialização.
 
 ---
 
@@ -405,7 +410,7 @@ Os usuários de demonstração são inseridos automaticamente quando o banco est
 - [ ] Rate limiting ativado
 - [ ] Variáveis de e-mail/SMTP configuradas
 - [ ] `AI_PROVIDER` configurado com chaves de API válidas
-- [ ] Senhas dos usuários de demonstração alteradas
+- [ ] Contas demonstrativas desativadas/removidas e contas administrativas próprias provisionadas
 
 ---
 

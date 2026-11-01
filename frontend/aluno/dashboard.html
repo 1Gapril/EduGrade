@@ -6,6 +6,47 @@
   <title>Portal do Aluno - EduGrade</title>
   <link rel="stylesheet" href="../css/main.css">
   <style>
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+    .stat-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .stat-icon {
+      display: flex;
+      flex: 0 0 42px;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-md);
+      color: var(--color-white);
+    }
+    .stat-icon.primary { background: var(--color-primary); }
+    .stat-icon.info { background: var(--color-info); }
+    .stat-icon.success { background: var(--color-success); }
+    .stat-icon.warning { background: var(--color-warning); }
+    .stat-content { min-width: 0; }
+    .stat-value {
+      color: var(--color-gray-900);
+      font-size: 1.375rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .stat-label {
+      margin-top: var(--space-1);
+      color: var(--color-gray-500);
+      font-size: 0.75rem;
+    }
     .student-header {
       display: flex;
       align-items: center;
@@ -207,6 +248,7 @@
         </div>
 
         <!-- Stats -->
+        <p class="text-muted" role="status">A lista de materiais vem da API; indicadores individuais de provas, notas e frequência não estão disponíveis.</p>
         <div class="stats-grid" id="stats-grid">
           <!-- Populated by JS -->
         </div>
@@ -285,49 +327,43 @@
 
     async function loadStudentData() {
       try {
-        // Load student profile
         const profile = await api.getProfile();
         renderStudentHeader(profile);
-
-        // Load stats (mock for now)
-        renderStats();
-
-        // Load upcoming exams
-        await loadUpcomingExams();
-        await loadStudyMaterials();
-
-        // Load recent grades
-        await loadRecentGrades();
-
-        // Load attendance
-        await loadAttendance();
       } catch (error) {
-        UI.showError('Erro ao carregar dados do aluno');
+        UI.showError(error.message || 'Não foi possível carregar o perfil do aluno.');
       }
+      const [, materialCount] = await Promise.all([
+        loadUpcomingExams(),
+        loadStudyMaterials(),
+        loadRecentGrades(),
+        loadAttendance(),
+      ]);
+      renderStats(materialCount);
     }
 
     function renderStudentHeader(profile) {
-      document.getElementById('student-name').textContent = profile.name || profile.username;
-      document.getElementById('student-avatar').textContent = (profile.name || profile.username)[0].toUpperCase();
-      document.getElementById('student-ra').textContent = profile.ra || 'Não informado';
-      document.getElementById('student-course').textContent = profile.course?.name || 'Não vinculado';
-      document.getElementById('student-class').textContent = profile.class?.name || 'Não vinculado';
-      document.getElementById('student-period').textContent = profile.currentPeriod?.name || 'Não informado';
+      const name = profile.full_name || profile.name || profile.username || 'Aluno';
+      document.getElementById('student-name').textContent = name;
+      document.getElementById('student-avatar').textContent = name[0].toUpperCase();
+      document.getElementById('student-ra').textContent = profile.ra || 'Não disponível';
+      document.getElementById('student-course').textContent = profile.course?.name || 'Não disponível';
+      document.getElementById('student-class').textContent = profile.class?.name || 'Não disponível';
+      document.getElementById('student-period').textContent = profile.currentPeriod?.name || 'Não disponível';
     }
 
-    function renderStats() {
+    function renderStats(materialCount) {
       const stats = [
-        { label: 'Provas Agendadas', value: '3', icon: 'file-text', color: 'primary' },
-        { label: 'Média Geral', value: '8.5', icon: 'award', color: 'success' },
-        { label: 'Frequência', value: '92%', icon: 'calendar', color: 'warning' },
-        { label: 'Disciplinas', value: '6', icon: 'book-open', color: 'info' },
+        { label: 'Materiais disponíveis', value: materialCount === null ? '—' : String(materialCount), icon: 'file-text', color: 'primary' },
+        { label: 'Provas Agendadas', icon: 'file-text', color: 'info' },
+        { label: 'Média Geral', icon: 'award', color: 'success' },
+        { label: 'Frequência', icon: 'calendar', color: 'warning' },
       ];
 
       document.getElementById('stats-grid').innerHTML = stats.map(s => `
         <div class="stat-card">
           <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
           <div class="stat-content">
-            <div class="stat-value">${s.value}</div>
+            <div class="stat-value">${s.value === undefined ? '—' : s.value}</div>
             <div class="stat-label">${s.label}</div>
           </div>
         </div>
@@ -336,37 +372,9 @@
     }
 
     async function loadUpcomingExams() {
-      // Mock data - replace with real API call
-      const exams = [
-        { id: '1', subject: 'Cálculo I', title: 'Prova 1 - Limites e Derivadas', date: '2026-11-15T14:00:00', location: 'Sala 101', status: 'scheduled' },
-        { id: '2', subject: 'Física II', title: 'Prova 2 - Eletromagnetismo', date: '2026-11-20T09:00:00', location: 'Lab 3', status: 'scheduled' },
-        { id: '3', subject: 'Programação', title: 'Projeto Final - Entrega', date: '2026-11-25T23:59:00', location: 'Online', status: 'scheduled' },
-      ];
-
-      if (exams.length === 0) {
-        return;
-      }
-
       document.getElementById('upcoming-exams-section').style.display = 'block';
-      document.getElementById('upcoming-exams-list').innerHTML = exams.map(exam => `
-        <div class="exam-card">
-          <div class="exam-card-header">
-            <span class="exam-card-title">${UI.escapeHtml(exam.subject)}: ${UI.escapeHtml(exam.title)}</span>
-            <span class="exam-card-date">${UI.formatDateTime(exam.date)}</span>
-          </div>
-          <div class="exam-card-body">
-            <div class="exam-card-meta">
-              <span><span data-feather="map-pin"></span> ${UI.escapeHtml(exam.location)}</span>
-              <span><span data-feather="clock"></span> ${UI.formatDateTime(exam.date)}</span>
-            </div>
-            <div class="exam-card-actions">
-              <button class="btn btn-secondary btn-sm"><span data-feather="eye"></span> Ver Detalhes</button>
-              <button class="btn btn-primary btn-sm"><span data-feather="download"></span> Material de Estudo</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-      feather.replace();
+      document.getElementById('upcoming-exams-list').textContent =
+        'A API ainda não disponibiliza provas filtradas pelas matrículas do aluno.';
     }
 
     async function loadStudyMaterials() {
@@ -376,7 +384,7 @@
         list.replaceChildren();
         if (!materials.length) {
           list.textContent = 'Ainda não há materiais publicados para suas disciplinas.';
-          return;
+          return 0;
         }
 
         materials.forEach(material => {
@@ -427,82 +435,23 @@
           card.append(header, body);
           list.append(card);
         });
+        return materials.length;
       } catch (error) {
         list.textContent = error.message || 'Não foi possível carregar os materiais.';
+        return null;
       }
     }
 
     async function loadRecentGrades() {
-      // Mock data
-      const grades = [
-        { subject: 'Cálculo I', exam: 'Prova 1 - Limites', date: '2026-10-15', grade: 9.0, status: 'approved' },
-        { subject: 'Física II', exam: 'Prova 1 - Mecânica', date: '2026-10-10', grade: 7.5, status: 'approved' },
-        { subject: 'Programação', exam: 'Projeto 1 - Algoritmos', date: '2026-10-05', grade: 8.5, status: 'approved' },
-        { subject: 'Álgebra Linear', exam: 'Prova 1 - Matrizes', date: '2026-11-01', grade: null, status: 'pending' },
-      ];
-
       document.getElementById('recent-grades-section').style.display = 'block';
-      document.getElementById('recent-grades-body').innerHTML = grades.map(g => `
-        <tr>
-          <td>${UI.escapeHtml(g.subject)}</td>
-          <td>${UI.escapeHtml(g.exam)}</td>
-          <td style="text-align: center;">${UI.formatDate(g.date)}</td>
-          <td style="text-align: right;">
-            ${g.grade !== null ? `<span class="grade-badge ${g.status}">${UI.formatNumber(g.grade, 1)}</span>` : '<span class="text-muted">Aguardando</span>'}
-          </td>
-          <td>
-            <span class="badge-status ${g.status === 'approved' ? 'success' : g.status === 'failed' ? 'danger' : 'warning'}">
-              ${g.status === 'approved' ? 'Aprovado' : g.status === 'failed' ? 'Reprovado' : 'Pendente'}
-            </span>
-          </td>
-        </tr>
-      `).join('');
+      document.getElementById('recent-grades-body').innerHTML =
+        '<tr><td colspan="5">A API ainda não disponibiliza a consulta de notas do aluno.</td></tr>';
     }
 
     async function loadAttendance() {
-      // Mock data
-      const attendance = [
-        { subject: 'Cálculo I', attended: 18, total: 20, percentage: 90 },
-        { subject: 'Física II', attended: 19, total: 20, percentage: 95 },
-        { subject: 'Programação', attended: 17, total: 20, percentage: 85 },
-        { subject: 'Álgebra Linear', attended: 16, total: 18, percentage: 89 },
-      ];
-
       document.getElementById('attendance-section').style.display = 'block';
-      document.getElementById('attendance-summary').innerHTML = `
-        <div class="table-container">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Disciplina</th>
-                <th>Presenças</th>
-                <th>Total</th>
-                <th>Percentual</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${attendance.map(a => `
-                <tr>
-                  <td>${UI.escapeHtml(a.subject)}</td>
-                  <td>${a.attended}</td>
-                  <td>${a.total}</td>
-                  <td>
-                    <div class="progress" style="width: 150px;">
-                      <div class="progress-bar ${a.percentage >= 75 ? 'success' : a.percentage >= 50 ? 'warning' : 'danger'}" style="width: ${a.percentage}%"></div>
-                    </div>
-                  </td>
-                  <td>
-                    <span class="badge-status ${a.percentage >= 75 ? 'success' : a.percentage >= 50 ? 'warning' : 'danger'}">
-                      ${a.percentage >= 75 ? 'Regular' : a.percentage >= 50 ? 'Atenção' : 'Crítico'}
-                    </span>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
+      document.getElementById('attendance-summary').textContent =
+        'A API permite consultar a frequência por matrícula, mas não disponibiliza as matrículas do aluno para este painel.';
     }
   </script>
 </body>

@@ -178,10 +178,6 @@ app.include_router(batch_grading.router, prefix="/api/v1")
 app.include_router(materials.router, prefix="/api/v1")
 app.include_router(admin_settings.router, prefix="/api/v1")
 
-# Static files (Storage)
-if STORAGE_DIR.is_dir():
-    app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
-
 # Frontend estático
 if FRONTEND_DIR.is_dir():
     # Rota raiz redireciona para login.html

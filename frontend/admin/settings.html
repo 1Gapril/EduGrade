@@ -144,8 +144,8 @@
             </section>
 
             <section class="settings-card" id="fcc">
-              <h2>FCC / Free Claude Code</h2><p>Estado obtido nos endpoints administrativos documentados pelo FCC. A URL é restrita a localhost para não expor a API administrativa na rede.</p>
-              <form id="fcc-form"><div class="settings-grid"><div class="settings-field"><label for="fcc-url">Endereço local</label><input class="form-input" id="fcc-url" name="base_url" type="url" required></div></div>
+              <h2>FCC / Free Claude Code</h2><p>Estado obtido nos endpoints administrativos documentados pelo FCC. Informe somente a origem local, sem <code>/admin</code>; o painel acrescenta o caminho da API automaticamente.</p>
+              <form id="fcc-form"><div class="settings-grid"><div class="settings-field"><label for="fcc-url">Endereço local</label><input class="form-input" id="fcc-url" name="base_url" type="url" placeholder="http://127.0.0.1:8082" required></div></div>
                 <div class="settings-actions"><button class="btn btn-primary" type="submit">Salvar endereço</button><button class="btn btn-secondary" id="test-fcc" type="button">Testar comunicação</button></div>
               </form>
               <div class="settings-status" id="fcc-message" role="status" aria-live="polite"></div>

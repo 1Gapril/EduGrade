@@ -2,16 +2,19 @@ const WORKSPACE_SCREENS = {
   '/admin/users.html': {
     title: 'Usuários',
     description: 'Contas cadastradas no EduGrade.',
+    roles: ['admin'],
     endpoint: '/users?page=1&page_size=100',
   },
   '/admin/access-requests.html': {
     title: 'Chamados de acesso',
     description: 'Solicitações abertas de criação de conta.',
+    roles: ['admin'],
     accessRequests: true,
   },
   '/admin/academic.html': {
     title: 'Cursos e disciplinas',
     description: 'Cursos e disciplinas cadastrados.',
+    roles: ['admin'],
     endpoints: [
       { title: 'Cursos', endpoint: '/academic/courses?page=1&page_size=100' },
       { title: 'Disciplinas', endpoint: '/academic/subjects?page=1&page_size=100' },
@@ -20,29 +23,25 @@ const WORKSPACE_SCREENS = {
   '/admin/classes.html': {
     title: 'Turmas',
     description: 'Turmas cadastradas no período letivo.',
+    roles: ['admin'],
     endpoint: '/academic/classes?page=1&page_size=100',
   },
   '/admin/periods.html': {
     title: 'Períodos letivos',
     description: 'Períodos letivos cadastrados.',
+    roles: ['admin'],
     endpoint: '/academic/periods?page=1&page_size=100',
   },
   '/admin/audit.html': {
     title: 'Auditoria',
     description: 'Atividades recentes registradas no sistema.',
+    roles: ['admin'],
     endpoint: '/audit/recent',
-  },
-  '/admin/settings.html': {
-    title: 'Configurações',
-    description: 'Status da aplicação e dos serviços de inteligência artificial.',
-    endpoints: [
-      { title: 'Aplicação', endpoint: '/health' },
-      { title: 'Serviço de IA', endpoint: '/ai/health' },
-    ],
   },
   '/admin/ai-status.html': {
     title: 'Status da inteligência artificial',
     description: 'Provedores e modelos de IA disponíveis.',
+    roles: ['admin'],
     endpoints: [
       { title: 'Status', endpoint: '/ai/health' },
       { title: 'Modelos', endpoint: '/ai/models' },
@@ -51,99 +50,118 @@ const WORKSPACE_SCREENS = {
   '/admin/logs.html': {
     title: 'Erros do sistema',
     description: 'Erros registrados pela aplicação.',
+    roles: ['admin'],
     endpoint: '/audit/system/errors',
   },
   '/admin/storage.html': {
     title: 'Armazenamento',
     description: 'Informações de armazenamento ainda não são disponibilizadas pela API.',
+    roles: ['admin'],
     message: 'A consulta de uso e gerenciamento de arquivos ainda não está implementada.',
   },
   '/exams/list.html': {
     title: 'Banco de provas',
     description: 'Provas cadastradas no sistema.',
+    roles: ['admin', 'teacher'],
     endpoint: '/exams?page=1&page_size=100',
   },
   '/exams/detail.html': {
     title: 'Detalhes da prova',
     description: 'Informações da prova selecionada.',
+    roles: ['admin', 'teacher'],
     endpoint: '/exams?page=1&page_size=100',
     examDetail: true,
   },
   '/exams/edit.html': {
     title: 'Editar prova',
     description: 'A edição de provas pela interface ainda não está implementada.',
+    roles: ['admin', 'teacher'],
     message: 'A API permite atualizar uma prova, mas esta tela ainda não possui formulário de edição.',
     examDetail: true,
   },
   '/professor/exams.html': {
     title: 'Minhas provas',
     description: 'Provas cadastradas no sistema.',
+    roles: ['teacher'],
     endpoint: '/exams?page=1&page_size=100',
   },
   '/aluno/exams.html': {
     title: 'Minhas provas',
     description: 'Provas disponíveis no sistema.',
+    roles: ['student'],
     endpoint: '/exams?page=1&page_size=100',
   },
   '/exams/create.html': {
     title: 'Nova prova',
     description: 'Preencha os dados da prova para salvá-la como rascunho.',
+    roles: ['admin', 'teacher'],
     createExam: true,
   },
   '/exams/print.html': {
     title: 'Impressão de provas',
     description: 'Geração de cópias e registro de impressão.',
+    roles: ['admin', 'teacher'],
     message: 'A impressão depende da seleção de uma prova publicada. Selecione uma prova no banco de provas para continuar.',
   },
   '/correcao-lote.html': {
     title: 'Correção em lote',
     description: 'Lotes de correção registrados no sistema.',
+    roles: ['admin', 'teacher'],
     endpoint: '/batch-grading/?page=1&page_size=100',
   },
   '/ai/corrections.html': {
     title: 'Correções por IA',
     description: 'Revisões pendentes de correção.',
+    roles: ['admin', 'teacher'],
     endpoint: '/ai/reviews/pending',
   },
   '/ai/review.html': {
     title: 'Revisões pendentes',
     description: 'Correções que aguardam revisão.',
+    roles: ['admin', 'teacher'],
     endpoint: '/ai/reviews/pending',
   },
   '/professor/classes.html': {
     title: 'Minhas turmas',
     description: 'Turmas disponíveis no sistema.',
+    roles: ['teacher'],
     endpoint: '/academic/classes?page=1&page_size=100',
   },
   '/professor/corrections.html': {
     title: 'Correções pendentes',
     description: 'Correções que aguardam revisão.',
+    roles: ['teacher'],
     endpoint: '/ai/reviews/pending',
   },
   '/professor/grades.html': {
     title: 'Lançar notas',
     description: 'A consulta de notas ainda não está disponível pela API.',
+    roles: ['teacher'],
     message: 'O lançamento de notas existe na API, mas esta tela ainda não possui formulário para selecionar turma e aluno.',
   },
   '/professor/class-detail.html': {
     title: 'Detalhes da turma',
     description: 'Turmas cadastradas no sistema.',
+    roles: ['teacher'],
     endpoint: '/academic/classes?page=1&page_size=100',
     classDetail: true,
   },
   '/aluno/grades.html': {
     title: 'Minhas notas',
     description: 'A consulta de notas do aluno ainda não está disponível pela API.',
+    roles: ['student'],
     message: 'O sistema ainda não possui uma operação de consulta de notas para esta tela.',
   },
   '/aluno/attendance.html': {
     title: 'Frequência',
     description: 'A consulta de frequência do aluno ainda não está disponível pela API.',
+    roles: ['student'],
     message: 'A API permite consultar a frequência de uma matrícula específica, mas esta tela ainda não carrega a matrícula do aluno.',
   },
   '/aluno/schedule.html': {
     title: 'Grade horária',
     description: 'A consulta de grade horária ainda não está disponível pela API.',
+    roles: ['student'],
     message: 'O sistema ainda não possui uma operação de consulta de grade horária para esta tela.',
   },
   '/profile.html': {
@@ -590,15 +608,6 @@ function splitCommaSeparated(value) {
   return value.split(',').map(item => item.trim()).filter(Boolean);
 }
 
-function storageFileUrl(filePath) {
-  const normalizedPath = String(filePath).replaceAll('\\', '/').replace(/^\.\//, '');
-  const storageIndex = normalizedPath.indexOf('storage/');
-  if (storageIndex === -1) {
-    throw new Error('O servidor não retornou um caminho válido para o arquivo.');
-  }
-  return `/${normalizedPath.slice(storageIndex).split('/').map(encodeURIComponent).join('/')}`;
-}
-
 async function loadCreateExamScreen(container) {
   if (!State.hasRole('admin', 'teacher')) {
     window.location.replace(Auth.dashboardPath());
@@ -782,13 +791,11 @@ async function loadCreateExamScreen(container) {
     keyButton.addEventListener('click', async () => {
       keyButton.disabled = true;
       try {
-        const pdf = await api.create(`/exams/versions/${examVersion.version_id}/pdf-teacher`, {});
-        const link = document.createElement('a');
-        link.href = storageFileUrl(pdf.pdf_path);
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.textContent = 'Abrir gabarito em PDF';
-        generatePrintOptions.querySelector('[data-print-files]').appendChild(link);
+        await api.download(
+          `/exams/versions/${examVersion.version_id}/pdf-teacher`,
+          `gabarito-${examVersion.version_id}.pdf`,
+          { method: 'POST', body: {} },
+        );
       } catch (error) {
         showWorkspaceMessage(error.message || 'Não foi possível gerar o gabarito.', true);
       } finally {
@@ -816,13 +823,11 @@ async function loadCreateExamScreen(container) {
           {},
         );
         for (const copy of copies) {
-          const pdf = await api.create(`/exams/copies/${copy.id}/pdf-student`, {});
-          const link = document.createElement('a');
-          link.href = storageFileUrl(pdf.pdf_path);
-          link.target = '_blank';
-          link.rel = 'noopener';
-          link.textContent = `Abrir prova do aluno ${copy.copy_identifier}`;
-          generatePrintOptions.querySelector('[data-print-files]').appendChild(link);
+          await api.download(
+            `/exams/copies/${copy.id}/pdf-student`,
+            `prova-${copy.copy_identifier}.pdf`,
+            { method: 'POST', body: {} },
+          );
           uploadCopySelect.add(new Option(copy.copy_identifier, copy.id));
         }
         uploadForm.hidden = false;
@@ -1063,6 +1068,10 @@ async function loadWorkspaceScreen() {
   const authenticated = await Auth.init();
   if (!authenticated) {
     window.location.replace('/login.html');
+    return;
+  }
+  if (screen.roles && !State.hasRole(...screen.roles)) {
+    window.location.replace(Auth.dashboardPath());
     return;
   }
   document.getElementById('workspace-home').href = Auth.dashboardPath();

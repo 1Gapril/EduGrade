@@ -22,7 +22,7 @@ from backend.app.repositories.exam_repository import (
 )
 from backend.app.schemas.ai_correction import (
     CorrectionRequest, CorrectionResponse, BatchCorrectionRequest, BatchCorrectionResponse,
-    AIProviderConfig, AIHealthCheck
+    AIHealthCheck
 )
 from backend.app.core.config import settings
 from backend.app.core.exceptions import ValidationError, NotFoundError, ExternalServiceError
@@ -254,6 +254,11 @@ class AIProviderFactory:
                 return cls._providers[cache_key]
 
         provider_type = provider_type or settings.ai_provider
+
+        if provider_type in {"openai", "anthropic"}:
+            raise ExternalServiceError(
+                f"O provedor de IA '{provider_type}' está configurado, mas ainda não é suportado."
+            )
 
         if provider_type in cls._providers:
             return cls._providers[provider_type]

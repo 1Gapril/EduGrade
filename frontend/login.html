@@ -76,24 +76,6 @@
     .login-footer a {
       font-weight: 500;
     }
-    .demo-credentials {
-      background: var(--color-gray-50);
-      border-radius: var(--radius-md);
-      padding: var(--space-4);
-      margin-top: var(--space-6);
-      font-size: 0.75rem;
-    }
-    .demo-credentials summary {
-      cursor: pointer;
-      font-weight: 500;
-      color: var(--color-gray-600);
-      margin-bottom: var(--space-2);
-    }
-    .demo-credentials p {
-      margin: var(--space-1) 0;
-      font-family: monospace;
-      color: var(--color-gray-700);
-    }
     @media (max-width: 480px) {
       .login-card {
         padding: var(--space-6);
@@ -131,22 +113,18 @@
         <p>Não tem conta? <a href="/register.html">Solicite acesso ao administrador</a></p>
       </div>
 
-      <details class="demo-credentials">
-        <summary>Credenciais de Demonstração</summary>
-        <p><strong>Admin:</strong> admin / admin123</p>
-        <p><strong>Professor:</strong> professor / prof123</p>
-        <p><strong>Aluno:</strong> aluno / aluno123</p>
-      </details>
     </div>
   </div>
 
   <script src="js/main.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      // Check if already logged in
-      if (State.isAuthenticated()) {
-        window.location.href = '/dashboard.html';
-        return;
+      State.init();
+      if (api.accessToken && await Auth.init()) {
+        if (State.isAuthenticated()) {
+          window.location.href = Auth.dashboardPath();
+          return;
+        }
       }
 
       const form = document.getElementById('login-form');
@@ -176,18 +154,6 @@
         }
       });
 
-      // Demo credential click-to-fill
-      document.querySelectorAll('.demo-credentials p').forEach(p => {
-        p.style.cursor = 'pointer';
-        p.addEventListener('click', () => {
-          const text = p.textContent;
-          const match = text.match(/(\w+)\s*\/\s*(\w+)/);
-          if (match) {
-            form.username.value = match[1];
-            form.password.value = match[2];
-          }
-        });
-      });
     });
   </script>
 </body>

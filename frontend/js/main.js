@@ -95,18 +95,27 @@ class APIClient {
     }
   }
 
-  async download(endpoint, filename) {
+  async download(endpoint, filename, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    const headers = {};
+    const requestOptions = { ...options };
+    const headers = { ...(requestOptions.headers || {}) };
     if (this.accessToken) headers.Authorization = 'Bearer ' + this.accessToken;
+    if (
+      requestOptions.body
+      && typeof requestOptions.body === 'object'
+      && !(requestOptions.body instanceof FormData)
+    ) {
+      headers['Content-Type'] = 'application/json';
+      requestOptions.body = JSON.stringify(requestOptions.body);
+    }
 
     try {
-      let response = await fetch(url, { headers });
+      let response = await fetch(url, { ...requestOptions, headers });
       if (response.status === 401 && this.refreshToken) {
         const refreshed = await this.refreshAccessToken();
         if (refreshed) {
           headers.Authorization = 'Bearer ' + this.accessToken;
-          response = await fetch(url, { headers });
+          response = await fetch(url, { ...requestOptions, headers });
         } else {
           this.clearTokens();
           window.location.href = '/login.html';
