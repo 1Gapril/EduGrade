@@ -41,7 +41,7 @@ Fonte: `docs/QA/BUGS_ENCONTRADOS.md` e `docs/QA/RELATORIO_FINAL.md`. Não são r
 | BUG-12 | Média | Falha na inicialização pode manter o servidor ativo | Aberto | — |
 | BUG-14 | Bloqueio | Tesseract e Poppler ausentes; impede teste real de OCR | Aberto | CV09, CV10, CV17 |
 | BUG-15 | Bloqueio | Sem chave de criptografia de credenciais e sem chave externa de IA | Aberto | CV10 |
-| BUG-16 | Média | README cita CI/CD, mas nenhum workflow do GitHub Actions está versionado | Aberto | — (Gabriel) |
+| BUG-16 | Média | README cita CI/CD; o workflow `ci.yml` foi adicionado à main, mas com erro de indentação YAML | Parcial: execução não confirmada | — (Gabriel) |
 | — | Alta | Cobertura de testes em **55,50%**, abaixo da meta de 80% | Aberto | — (Fernando) |
 
 ## 4. Inconsistências de documentação percebidas na revisão (para o Gabriel)

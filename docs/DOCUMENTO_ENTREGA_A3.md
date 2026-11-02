@@ -168,7 +168,7 @@ Do ponto de vista da Gestão e Qualidade de Software, o projeto mostra que um si
 
 > **Atualizar esta seção antes da entrega**, com base no estado real da versão entregue.
 
-Na revisão do repositório de 01/11/2026 (`docs/QA/`), constavam entre as pendências: cobertura de testes abaixo de 80%; upload de arquivos no processamento em lote ainda não implementado; correção por IA operando com provedor simulado, sem provedor real validado; dependências de OCR indisponíveis no ambiente de teste; logout sem revogação de token no servidor; e ausência de workflow de CI versionado. Itens como histórico acadêmico dedicado, relatórios, painel de qualidade e rotina de backup não foram identificados no código e dependem de confirmação do grupo sobre o escopo da entrega.
+Na revisão do repositório de 01/11/2026 (`docs/QA/`), constavam entre as pendências: cobertura de testes abaixo de 80%; upload de arquivos no processamento em lote ainda não implementado; correção por IA operando com provedor simulado, sem provedor real validado; dependências de OCR indisponíveis no ambiente de teste; logout sem revogação de token no servidor; e pipeline de CI versionado, mas ainda sem execução confirmada. Itens como histórico acadêmico dedicado, relatórios, painel de qualidade e rotina de backup não foram identificados no código e dependem de confirmação do grupo sobre o escopo da entrega. 
 
 ### 10.2 Trabalhos futuros
 

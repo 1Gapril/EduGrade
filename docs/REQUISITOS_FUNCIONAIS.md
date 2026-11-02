@@ -93,7 +93,7 @@ Prefixo comum das rotas: `/api/v1`.
 | RNF07 | **Credenciais fora do código**; `.env` não versionado. | `.env` ignorado pelo Git (QA). |
 | RNF08 | **Precisão decimal** em notas (`Decimal`). | Não verificado. |
 | RNF09 | **Cobertura mínima de testes de 80%**, com o relatório em HTML. | **Não atendido**: 55,50% em 02/11/2026 (15 testes passando). |
-| RNF10 | **CI/CD** (GitHub Actions) com lint, testes e falha abaixo de 80%. | **Não identificado**: nenhum workflow rastreado (BUG-16). |
+| RNF10 | **CI/CD** (GitHub Actions) com lint, testes e falha abaixo de 80%. | Workflow `ci.yml` versionado na main (lint, testes, gate de 80% e artefato de cobertura). Erro de indentação YAML detectado na leitura; execução no GitHub Actions ainda não confirmada. |
 | RNF11 | **Migrações de banco** versionadas. | **Aberto**: migração inicial não contém todas as tabelas (BUG-11). |
 | RNF12 | **Interface responsiva e sem botões inativos**; dados indisponíveis são sinalizados, não inventados. | Dashboards sem números fictícios (BUG-05 corrigido). |
 | RNF13 | **Usabilidade**: mensagens de erro claras e estados de carregamento. | Corrigido nos dashboards testados (BUG-17). |
