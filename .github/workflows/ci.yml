@@ -79,11 +79,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, test, build]
     if: always()
-    run: |
-      if [ "${{ needs.lint.result }}" = "success" ] && \
-         [ "${{ needs.test.result }}" = "success" ] && \
-         [ "${{ needs.build.result }}" = "success" ]; then
-        echo "✅  All checks passed"
-      else
-        echo "❌  Some checks failed"; exit 1
-      fi
+    steps:
+      - name: Check status
+        run: |
+          if [ "${{ needs.lint.result }}" = "success" ] && \
+             [ "${{ needs.test.result }}" = "success" ] && \
+             [ "${{ needs.build.result }}" = "success" ]; then
+            echo "✅  All checks passed"
+          else
+            echo "❌  Some checks failed"; exit 1
+          fi
