@@ -1,8 +1,101 @@
-  name: CI
-  on: [push]
-  jobs:
-    test:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-        - run: echo "OK"
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  COVERAGE_THRESHOLD: 80
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install ruff black
+      - run: ruff check . --output-format=github
+      - run: black --check --diff .
+
+  test:
+    name: Tests & Coverage
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install system deps (OCR)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev poppler-utils
+      - name: Install Python deps
+        run: |
+          pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio httpx
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest -v --tb=short
+          coverage xml -o coverage.xml
+          coverage html -d htmlcov
+      - name: Check coverage threshold
+        run: |
+          COV=$(coverage report --format=total)
+          echo "Coverage: ${COV}%"
+          if [ "$COV" -lt ${{ env.COVERAGE_THRESHOLD }} ]; then
+            echo "::error::Coverage ${COV}% below ${{ env.COVERAGE_THRESHOLD }}%"
+            exit 1
+          fi
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+      - name: Upload coverage.xml
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 7
+
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
+      - run: python -c "import app; print('✅  App imports OK')"
+
+  evidence:
+    name: Generate Evidence
+    runs-on: ubuntu-latest
+    needs: [lint, test, build]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Summary for presentation
+        run: |
+          echo "## CI/CD Evidence Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint (ruff + black) | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests + Coverage (≥${{ env.COVERAGE_THRESHOLD }}%) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (import OK) | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Use este resumo no **ROTEIRO_APRESENTACAO_A3.md** e slides." >> $GITHUB_STEP_SUMMARY
