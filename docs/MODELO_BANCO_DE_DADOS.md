@@ -1885,4 +1885,3 @@ O modelo declara relacionamentos ORM com Subject e User.
 O campo `file_size` não possui restrição CHECK explícita para impedir valores negativos.
 
 A tabela armazena informações e referências aos arquivos. O conteúdo binário do material não é declarado como coluna neste modelo.
-
