@@ -91,7 +91,9 @@ Edite o arquivo `.env` e altere ao menos:
   python -c "import secrets; print(secrets.token_urlsafe(32))"
   ```
 - `DATABASE_URL` — se quiser usar PostgreSQL em vez de SQLite
-- `AI_PROVIDER` — `mock` (padrão), `ollama`, `openai` ou `anthropic`
+- `AI_PROVIDER` — `mock`, `ollama` ou `fcc_claude`
+- `FCC_BASE_URL` — endereço local do Free Claude Code (padrão: `http://127.0.0.1:8082`)
+- `FCC_MODEL` — alias de modelo exposto pela API compatível com Claude
 
 ### 5. Configure o Banco de Dados
 
@@ -198,19 +200,31 @@ OLLAMA_TEXT_MODEL=llama3.1
 OLLAMA_MULTIMODAL_MODEL=llava
 ```
 
-### OpenAI
-No `.env`:
+### Free Claude Code (FCC)
+Com o FCC ativo localmente, use sua API compatível com Anthropic sem cadastrar
+uma chave Groq/NVIDIA no EduGrade:
 ```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
+AI_PROVIDER=fcc_claude
+FCC_BASE_URL=http://127.0.0.1:8082
+FCC_MODEL=claude-sonnet-4-20250514
 ```
+O modelo upstream (por exemplo, NVIDIA NIM) é selecionado no próprio FCC.
 
-### Anthropic
-No `.env`:
-```env
-AI_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-```
+Na tela **Nova prova**, envie o PDF da prova e, opcionalmente, o PDF do
+gabarito. A IA extrai os enunciados, pontuações e respostas para preencher um
+rascunho. Se o PDF for digitalizado, a extração usa o Tesseract configurado no
+OCR. Confira turma, questões e gabaritos antes de salvar; a importação não
+publica a prova automaticamente.
+
+Para corrigir respostas digitalizadas, entre no **Portal do Professor** e abra
+**Enviar Provas para Correção**. Selecione uma prova publicada e um aluno da
+turma, envie o PDF ou as imagens e aguarde o OCR e a comparação com o gabarito.
+Questões que precisam de conferência continuam disponíveis em **Correções
+Pendentes**.
+
+### OpenAI e Anthropic diretos
+As APIs diretas desses provedores ainda não estão disponíveis pela configuração
+de ambiente. A integração Anthropic compatível via FCC está descrita acima.
 
 ### Simulado (padrão — sem custo, para testes)
 ```env

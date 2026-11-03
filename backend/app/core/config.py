@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     allowed_extensions: List[str] = Field(default=[".pdf", ".jpg", ".jpeg", ".png"])
 
     # AI Providers
-    ai_provider: str = "mock"  # mock, ollama, openai, anthropic
+    ai_provider: str = "mock"  # mock, ollama, fcc_claude
     ollama_base_url: str = "http://localhost:11434"
     ollama_text_model: str = "llama3.1"
     ollama_multimodal_model: str = "llava"
@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     ai_max_retries: int = 3
     credential_encryption_key: Optional[str] = None
     fcc_base_url: str = "http://127.0.0.1:8082"
+    fcc_model: str = "claude-sonnet-4-20250514"
 
     # OCR
     ocr_engine: str = "tesseract"  # tesseract, paddleocr
