@@ -277,8 +277,9 @@ class ExamCopyService:
             raise NotFoundError("Versão não encontrada")
 
         copies = []
+        first_copy_number = len(self.repo.get_by_version(version_id)) + 1
         for i in range(count):
-            copy_id = f"{version.exam_id}-v{version.version_number}-{i+1:04d}"
+            copy_id = f"{version.exam_id}-v{version.version_number}-{first_copy_number+i:04d}"
             student_id = student_ids[i] if student_ids and i < len(student_ids) else None
 
             qr_data = {

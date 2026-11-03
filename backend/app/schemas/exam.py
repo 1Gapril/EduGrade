@@ -1,7 +1,7 @@
 """Schemas Pydantic para Provas, Questões, Gabaritos, Impressão, Submissões."""
 
 from datetime import datetime, date
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from uuid import UUID
 from decimal import Decimal
 
@@ -75,6 +75,33 @@ class ExamCreateWithQuestions(ExamCreate):
                 f"A soma das questões ({question_total}) deve ser igual ao valor total ({self.total_score})."
             )
         return self
+
+
+class ImportedExamQuestion(BaseModel):
+    """Questão extraída por IA, aguardando conferência do professor."""
+
+    type: Literal["multiple_choice", "essay", "short_answer", "calculation", "multi_criteria"]
+    statement: str = Field(min_length=1)
+    score: Decimal = Field(gt=0)
+    alternatives: List[str] = Field(default_factory=list)
+    correct_answer: Optional[str] = None
+    expected_answer: Optional[str] = None
+    accepted_alternatives: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    required_concepts: List[str] = Field(default_factory=list)
+    justification: Optional[str] = None
+    answer_needs_review: bool = True
+
+
+class ExamPDFImportResponse(BaseModel):
+    """Conteúdo proposto pela IA a partir da prova e do gabarito enviados."""
+
+    title: str = Field(min_length=2, max_length=255)
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    total_score: Decimal = Field(gt=0)
+    questions: List[ImportedExamQuestion] = Field(min_length=1, max_length=100)
+    review_notes: List[str] = Field(default_factory=list)
 
 
 class ExamUpdate(BaseModel):

@@ -215,7 +215,23 @@ class AIProviderFactory:
 
     @classmethod
     def get_provider(cls, provider_type: str = None, db: Session = None) -> AIProvider:
-        if db is not None and provider_type is None:
+        use_admin_default = db is not None and provider_type is None
+        provider_type = provider_type or settings.ai_provider
+
+        if provider_type == "fcc_claude":
+            if provider_type not in cls._providers:
+                cls._providers[provider_type] = ConfiguredAIProvider(
+                    provider_id=provider_type,
+                    provider_type="anthropic",
+                    base_url=settings.fcc_base_url,
+                    api_key=None,
+                    model=settings.fcc_model,
+                    vision_model=settings.fcc_model,
+                    timeout_seconds=settings.ai_timeout_seconds,
+                )
+            return cls._providers[provider_type]
+
+        if use_admin_default:
             configured = db.execute(
                 select(AIProviderConfig).where(
                     AIProviderConfig.is_default.is_(True),
@@ -253,13 +269,10 @@ class AIProviderFactory:
                     )
                 return cls._providers[cache_key]
 
-        provider_type = provider_type or settings.ai_provider
-
         if provider_type in {"openai", "anthropic"}:
             raise ExternalServiceError(
                 f"O provedor de IA '{provider_type}' está configurado, mas ainda não é suportado."
             )
-
         if provider_type in cls._providers:
             return cls._providers[provider_type]
 
@@ -268,13 +281,12 @@ class AIProviderFactory:
         elif provider_type == "local":
             provider = LocalAIProvider(
                 base_url=settings.ollama_base_url,
-                api_key=None,  # Servidor local geralmente não precisa de API key
+                api_key=None,
             )
         elif provider_type == "ollama":
             provider = LocalAIProvider(base_url=settings.ollama_base_url)
         else:
-            # Default para mock
-            provider = MockProvider()
+            raise ExternalServiceError(f"O provedor de IA '{provider_type}' não é reconhecido.")
 
         cls._providers[provider_type] = provider
         return provider

@@ -109,6 +109,12 @@ const WORKSPACE_SCREENS = {
     roles: ['admin', 'teacher'],
     endpoint: '/batch-grading/?page=1&page_size=100',
   },
+  '/professor/upload-exams.html': {
+    title: 'Enviar provas para correção',
+    description: 'Escolha uma prova publicada, identifique o aluno e envie a digitalização para correção.',
+    roles: ['admin', 'teacher'],
+    uploadExams: true,
+  },
   '/ai/corrections.html': {
     title: 'Correções por IA',
     description: 'Revisões pendentes de correção.',
@@ -531,6 +537,7 @@ function createExamQuestionCard(order) {
           <option value="essay">Dissertativa</option>
           <option value="short_answer">Resposta curta</option>
           <option value="calculation">Cálculo</option>
+          <option value="multi_criteria">Múltiplos critérios</option>
         </select>
       </div>
       <div class="form-group">
@@ -544,7 +551,7 @@ function createExamQuestionCard(order) {
       <div class="workspace-question-options" data-multiple-choice>
         <span class="form-label">Alternativas</span>
         <div class="workspace-question-alternatives">
-          ${['A', 'B', 'C', 'D'].map(letter => `
+          ${'ABCDEFGHIJ'.split('').map(letter => `
             <label class="workspace-alternative">
               <span>${letter}</span>
               <input class="form-input" data-alternative="${letter}" maxlength="500" ${letter === 'A' || letter === 'B' ? 'required' : ''}>
@@ -555,8 +562,7 @@ function createExamQuestionCard(order) {
           <label class="form-label">Resposta correta</label>
           <select class="form-input" data-correct-answer required>
             <option value="">Selecione</option>
-            <option value="A">A</option><option value="B">B</option>
-            <option value="C">C</option><option value="D">D</option>
+            ${'ABCDEFGHIJ'.split('').map(letter => `<option value="${letter}">${letter}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -615,6 +621,24 @@ async function loadCreateExamScreen(container) {
   }
 
   container.innerHTML = `
+    <section class="workspace-question-list card" aria-labelledby="exam-pdf-import-title">
+      <h2 id="exam-pdf-import-title">Criar prova a partir de PDFs</h2>
+      <p>Envie a prova e, se tiver, o gabarito. A IA preencherá um rascunho para você revisar. Nada será publicado automaticamente.</p>
+      <form id="exam-pdf-import-form" class="workspace-form">
+        <div class="form-group">
+          <label class="form-label" for="exam-pdf-file">Arquivo da prova (PDF)</label>
+          <input class="form-input" id="exam-pdf-file" name="exam_file" type="file" accept=".pdf,application/pdf" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="answer-key-pdf-file">Gabarito (PDF, opcional)</label>
+          <input class="form-input" id="answer-key-pdf-file" name="answer_key_file" type="file" accept=".pdf,application/pdf">
+        </div>
+        <div class="workspace-form-actions">
+          <button class="btn btn-secondary" type="submit">Ler PDFs e preencher rascunho</button>
+        </div>
+      </form>
+      <div id="exam-import-status" class="workspace-message" role="status" hidden></div>
+    </section>
     <form id="create-exam-form" class="workspace-form workspace-exam-form">
       <div class="form-group">
         <label class="form-label" for="exam-title">Título da prova</label>
@@ -708,8 +732,11 @@ async function loadCreateExamScreen(container) {
   const questionList = form.querySelector('#exam-questions');
   const totalScore = form.querySelector('#exam-total-score');
   const saveButton = form.querySelector('#save-exam');
+  const importForm = container.querySelector('#exam-pdf-import-form');
+  const importStatus = container.querySelector('#exam-import-status');
   let savedExam = null;
   let examVersion = null;
+  let importedDraft = false;
 
   const updateQuestionTotals = () => {
     const cards = [...questionList.querySelectorAll('[data-question-card]')];
@@ -733,10 +760,100 @@ async function loadCreateExamScreen(container) {
     });
     questionList.appendChild(card);
     updateQuestionTotals();
+    return card;
   };
 
   addQuestion();
   form.querySelector('#add-exam-question').addEventListener('click', addQuestion);
+
+  importForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = importForm.querySelector('button[type="submit"]');
+    const examFile = importForm.elements.exam_file.files[0];
+    if (!examFile) return;
+    const body = new FormData();
+    body.append('exam_file', examFile);
+    const answerKeyFile = importForm.elements.answer_key_file.files[0];
+    if (answerKeyFile) body.append('answer_key_file', answerKeyFile);
+
+    UI.setLoading(button, true);
+    importStatus.hidden = false;
+    importStatus.classList.remove('workspace-error');
+    importStatus.textContent = 'Lendo os PDFs e extraindo questões e gabaritos. Aguarde...';
+    try {
+      const response = await fetch(`${api.baseURL}/exams/analyze-pdfs`, {
+        method: 'POST',
+        headers: api.accessToken ? { Authorization: 'Bearer ' + api.accessToken } : {},
+        body,
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const detail = Array.isArray(result.detail)
+          ? result.detail.map(item => item.msg).join('; ')
+          : result.detail || result.message;
+        const errorMessage = [result.message, detail]
+          .filter((message, index, messages) => message && messages.indexOf(message) === index)
+          .join(' ');
+        throw new Error(errorMessage || 'Não foi possível ler os PDFs.');
+      }
+
+      form.elements.title.value = result.title;
+      form.elements.description.value = result.description || '';
+      form.elements.instructions.value = result.instructions || '';
+      questionList.replaceChildren();
+      for (const [index, question] of result.questions.entries()) {
+        const card = addQuestion();
+        const typeSelect = card.querySelector('[data-question-type]');
+        const supportedTypes = ['multiple_choice', 'essay', 'short_answer', 'calculation', 'multi_criteria'];
+        typeSelect.value = supportedTypes.includes(question.type) ? question.type : 'essay';
+        typeSelect.dispatchEvent(new Event('change'));
+        card.querySelector('[data-question-score]').value = question.score;
+        card.querySelector('[data-question-statement]').value = question.statement || '';
+        card.querySelector('[data-expected-answer]').value = question.expected_answer || '';
+        card.querySelector('[data-keywords]').value = (question.keywords || []).join(', ');
+        card.querySelector('[data-required-concepts]').value = (question.required_concepts || []).join(', ');
+        card.querySelector('[data-accepted-alternatives]').value = (question.accepted_alternatives || []).join(', ');
+        card.querySelector('[data-justification]').value = question.justification || '';
+
+        const letters = 'ABCDEFGHIJ'.split('');
+        const alternatives = question.alternatives || [];
+        if (alternatives.length > letters.length) {
+          if (!Array.isArray(result.review_notes)) result.review_notes = [];
+          result.review_notes.push(
+            'A questão ' + (index + 1) + ' tem mais alternativas do que o formulário comporta; confira o PDF.',
+          );
+        }
+        alternatives.slice(0, letters.length).forEach((alternative, alternativeIndex) => {
+          const input = card.querySelector(
+            '[data-alternative="' + letters[alternativeIndex] + '"]',
+          );
+          input.value = alternative;
+        });
+        if (question.type === 'multiple_choice') {
+          card.querySelector('[data-correct-answer]').value = question.correct_answer || '';
+        } else if (!question.expected_answer && question.correct_answer) {
+          card.querySelector('[data-expected-answer]').value = question.correct_answer;
+        }
+        if (question.answer_needs_review) {
+          if (!Array.isArray(result.review_notes)) result.review_notes = [];
+          result.review_notes.push('Confira o gabarito da questão ' + (index + 1) + '.');
+        }
+      }
+      updateQuestionTotals();
+      importedDraft = true;
+      saveButton.textContent = 'Salvar rascunho para conferência';
+      importStatus.textContent = [
+        `Foram extraídas ${result.questions.length} questão(ões). Confira os enunciados, pontuações e gabaritos, selecione a turma e revise antes de salvar.`,
+        ...(result.review_notes || []),
+      ].join(' ');
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (error) {
+      importStatus.classList.add('workspace-error');
+      importStatus.textContent = error.message || 'Não foi possível ler os PDFs.';
+    } finally {
+      UI.setLoading(button, false);
+    }
+  });
 
   try {
     const [classesResponse, periodsResponse] = await Promise.all([
@@ -956,7 +1073,7 @@ async function loadCreateExamScreen(container) {
     if (!savedExam) {
       const questions = [...questionList.querySelectorAll('[data-question-card]')].map(card => {
         const type = card.querySelector('[data-question-type]').value;
-        const alternatives = ['A', 'B', 'C', 'D']
+        const alternatives = 'ABCDEFGHIJ'.split('')
           .map(letter => card.querySelector(`[data-alternative="${letter}"]`).value.trim())
           .filter(Boolean);
         const expectedAnswer = card.querySelector('[data-expected-answer]').value.trim();
@@ -985,6 +1102,10 @@ async function loadCreateExamScreen(container) {
       });
 
       for (const [index, question] of questions.entries()) {
+        if (question.type === 'multiple_choice' && !question.correct_answer) {
+          showWorkspaceMessage(`Confira e selecione o gabarito da questão ${index + 1}.`, true);
+          return;
+        }
         if (question.type !== 'multiple_choice'
           && !question.expected_answer
           && question.keywords.length === 0
@@ -1012,6 +1133,21 @@ async function loadCreateExamScreen(container) {
       UI.setLoading(saveButton, true);
       try {
         savedExam = await api.create('/exams/complete', examData);
+        importForm.querySelectorAll('input, button').forEach(element => {
+          element.disabled = true;
+        });
+        if (importedDraft) {
+          form.querySelectorAll('input, select, textarea, button').forEach(element => {
+            if (element.id !== 'save-exam') element.disabled = true;
+          });
+          saveButton.textContent = 'Rascunho salvo para conferência';
+          saveButton.disabled = true;
+          showWorkspaceMessage(
+            `Rascunho "${savedExam.title}" salvo com ${questions.length} questão(ões). Revise a prova antes de publicá-la.`,
+          );
+          UI.setLoading(saveButton, false);
+          return;
+        }
         form.querySelectorAll('input, select, textarea, button').forEach(element => {
           if (element.id !== 'save-exam') element.disabled = true;
         });
@@ -1044,6 +1180,171 @@ async function loadCreateExamScreen(container) {
       if (examVersion) saveButton.disabled = true;
     }
   });
+}
+
+async function loadUploadExamsScreen(container) {
+  container.replaceChildren();
+  const form = document.createElement('form');
+  form.className = 'workspace-form workspace-exam-form';
+  form.innerHTML = `
+    <div class="form-group">
+      <label class="form-label" for="upload-exam-version">Prova publicada</label>
+      <select class="form-input" id="upload-exam-version" name="version_id" required>
+        <option value="">Carregando provas...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="upload-exam-student">Aluno</label>
+      <select class="form-input" id="upload-exam-student" name="student_id" required disabled>
+        <option value="">Selecione primeiro uma prova</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="upload-exam-files">Prova respondida (PDF ou imagem)</label>
+      <input class="form-input" id="upload-exam-files" name="files" type="file"
+        accept=".pdf,.png,.jpg,.jpeg" multiple required>
+    </div>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" type="submit" disabled>Enviar e corrigir</button>
+    </div>
+  `;
+  const versionSelect = form.elements.version_id;
+  const studentSelect = form.elements.student_id;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const versionsById = new Map();
+  let students = [];
+
+  const setOptions = (select, placeholder, options) => {
+    select.replaceChildren(new Option(placeholder, ''));
+    for (const option of options) {
+      select.add(new Option(option.label, option.value));
+    }
+  };
+
+  form.addEventListener('change', async event => {
+    if (event.target === studentSelect) {
+      submitButton.disabled = !studentSelect.value;
+      return;
+    }
+    if (event.target !== versionSelect) return;
+    const selectedVersion = versionsById.get(versionSelect.value);
+    students = [];
+    studentSelect.disabled = true;
+    submitButton.disabled = true;
+    setOptions(studentSelect, selectedVersion ? 'Carregando alunos...' : 'Selecione primeiro uma prova', []);
+    if (!selectedVersion) return;
+
+    try {
+      const result = await api.request(
+        `/students?class_id=${encodeURIComponent(selectedVersion.class_id)}&page=1&page_size=100`,
+      );
+      students = normalizeRows(result).filter(student => student.status === 'active');
+      setOptions(
+        studentSelect,
+        students.length ? 'Selecione o aluno' : 'Nenhum aluno ativo nesta turma',
+        students.map(student => ({
+          value: student.id,
+          label: `${student.user.full_name} (RA: ${student.ra})`,
+        })),
+      );
+      studentSelect.disabled = students.length === 0;
+      submitButton.disabled = true;
+    } catch (error) {
+      setOptions(studentSelect, 'Não foi possível carregar os alunos', []);
+      showWorkspaceMessage(error.message || 'Não foi possível carregar os alunos da turma.', true);
+    }
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const files = [...form.elements.files.files];
+    if (!files.length) {
+      showWorkspaceMessage('Selecione pelo menos um PDF ou uma imagem.', true);
+      return;
+    }
+    const selectedVersion = versionsById.get(versionSelect.value);
+    const selectedStudent = students.find(student => student.id === studentSelect.value);
+    if (!selectedVersion || !selectedStudent) {
+      showWorkspaceMessage('Selecione uma prova publicada e um aluno da turma.', true);
+      return;
+    }
+
+    UI.setLoading(submitButton, true);
+    let submission = null;
+    try {
+      showWorkspaceMessage('Preparando a submissão...');
+      const copies = await api.create(
+        `/exams/versions/${encodeURIComponent(selectedVersion.version_id)}/copies?count=1&student_ids=${encodeURIComponent(selectedStudent.id)}`,
+        {},
+      );
+      if (!Array.isArray(copies) || !copies[0]?.id) {
+        throw new Error('Não foi possível criar a cópia vinculada ao aluno.');
+      }
+
+      const body = new FormData();
+      body.append('copy_id', copies[0].id);
+      for (const file of files) body.append('files', file);
+      submission = await api.request('/exams/submissions', { method: 'POST', body });
+
+      showWorkspaceMessage('Prova enviada. Iniciando leitura das respostas...');
+      const ocrResult = await api.create(`/exams/submissions/${submission.id}/process-ocr`, {});
+      if (ocrResult.answers_extracted === 0) {
+        throw new Error(
+          'A prova foi recebida, mas o OCR não identificou respostas numeradas. Confira a legibilidade e a numeração das questões.',
+        );
+      }
+
+      showWorkspaceMessage('Respostas identificadas. Comparando com o gabarito publicado...');
+      const correction = await api.create('/ai/batch-correct', { submission_id: submission.id });
+      if (correction.total_processed === 0 && correction.failed === 0) {
+        throw new Error('A prova foi recebida, mas não foram encontradas respostas legíveis para corrigir.');
+      }
+      showWorkspaceMessage(
+        `Correção iniciada para ${selectedStudent.user.full_name}: ${correction.total_processed} questão(ões) processada(s), ${correction.requires_review_count} aguardando conferência, ${correction.skipped} sem resposta reconhecida e ${correction.failed} falha(s).`,
+      );
+      form.reset();
+      studentSelect.disabled = true;
+      submitButton.disabled = true;
+    } catch (error) {
+      const message = error.message || 'Não foi possível enviar e corrigir a prova.';
+      if (submission) {
+        form.reset();
+        studentSelect.disabled = true;
+        submitButton.disabled = true;
+      }
+      showWorkspaceMessage(
+        submission
+          ? `${message} A submissão ${submission.id} foi salva; confira o status antes de reenviar para evitar duplicidade.`
+          : message,
+        true,
+      );
+    } finally {
+      UI.setLoading(submitButton, false);
+      submitButton.disabled = Boolean(submission) || !versionSelect.value || !studentSelect.value;
+    }
+  });
+
+  container.appendChild(form);
+  try {
+    const versions = normalizeRows(await api.request('/exams/versions/active'));
+    for (const version of versions) versionsById.set(version.version_id, version);
+    setOptions(
+      versionSelect,
+      versions.length ? 'Selecione uma prova publicada' : 'Nenhuma prova publicada disponível',
+      versions.map(version => ({
+        value: version.version_id,
+        label: `${version.title} — ${version.class_name} / ${version.subject_name} (v${version.version_number})`,
+      })),
+    );
+    versionSelect.disabled = versions.length === 0;
+    submitButton.disabled = true;
+    if (!versions.length) {
+      showWorkspaceMessage('Publique uma prova antes de enviar respostas para correção.');
+    }
+  } catch (error) {
+    form.remove();
+    showWorkspaceMessage(error.message || 'Não foi possível carregar as provas publicadas.', true);
+  }
 }
 
 async function loadWorkspaceScreen() {
@@ -1100,6 +1401,11 @@ async function loadWorkspaceScreen() {
 
   if (screen.createExam) {
     await loadCreateExamScreen(content);
+    return;
+  }
+
+  if (screen.uploadExams) {
+    await loadUploadExamsScreen(content);
     return;
   }
 

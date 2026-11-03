@@ -17,6 +17,7 @@ from backend.app.models.exam import (
     Exam,
     ExamCopy,
     ExamQuestion,
+    ExamStatus,
     ExamSubmission,
     ExamVersion,
     QuestionType,
@@ -190,6 +191,8 @@ def authorization_api():
         "other_student": other_student,
         "question": question,
         "exam": exam,
+        "version": version,
+        "db": db,
         "own_submission": own_submission,
         "other_submission": other_submission,
     }
@@ -199,6 +202,47 @@ def authorization_api():
     app.dependency_overrides.update(original_overrides)
     db.close()
     engine.dispose()
+
+
+def test_teachers_can_list_active_published_versions_and_create_unique_upload_copies(authorization_api):
+    client = authorization_api["client"]
+    actor = authorization_api["actor"]
+    exam = authorization_api["exam"]
+    version = authorization_api["version"]
+    exam.status = ExamStatus.PUBLISHED
+    authorization_api["db"].commit()
+
+    assert client.get("/api/v1/exams/versions/active").status_code == 403
+
+    actor[0] = authorization_api["teacher"]
+    listed = client.get("/api/v1/exams/versions/active")
+
+    assert listed.status_code == 200
+    assert listed.json() == [
+        {
+            "version_id": str(version.id),
+            "exam_id": str(exam.id),
+            "title": version.title,
+            "version_number": version.version_number,
+            "class_id": str(exam.class_id),
+            "class_name": exam.class_.name,
+            "subject_name": exam.subject.name,
+        }
+    ]
+
+    first = client.post(
+        f"/api/v1/exams/versions/{version.id}/copies",
+        params={"count": 1, "student_ids": str(authorization_api["student"].id)},
+    )
+    second = client.post(
+        f"/api/v1/exams/versions/{version.id}/copies",
+        params={"count": 1, "student_ids": str(authorization_api["student"].id)},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()[0]["copy_identifier"].endswith("-0003")
+    assert second.json()[0]["copy_identifier"].endswith("-0004")
 
 
 def test_students_only_list_and_read_their_own_limited_submissions(authorization_api):

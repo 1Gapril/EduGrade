@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user, require_teacher_or_admin, require_admin
 from backend.app.models.user import User, UserRole
+from backend.app.models.exam import Exam, ExamStatus, ExamVersion
 from backend.app.schemas.exam import (
-    ExamCreate, ExamCreateWithQuestions, ExamUpdate, ExamResponse, ExamWithRelations,
+    ExamCreate, ExamCreateWithQuestions, ExamPDFImportResponse, ExamUpdate, ExamResponse, ExamWithRelations,
     QuestionCreate, QuestionUpdate, QuestionResponse, QuestionWithAnswerKey,
     AnswerKeyCreate, AnswerKeyUpdate, AnswerKeyResponse,
     GradingRubricCreate, GradingRubricUpdate, GradingRubricResponse,
@@ -26,6 +27,8 @@ from backend.app.services.exam_service import (
     ExamService, QuestionService, AnswerKeyService, GradingRubricService,
     ExamCopyService, SubmissionService,
 )
+from backend.app.services.exam_import_service import ExamPDFImportService
+from backend.app.core.config import settings
 from backend.app.schemas.common import PaginationParams, PaginatedResponse
 
 router = APIRouter(prefix="/exams", tags=["Provas"])
@@ -49,6 +52,38 @@ def _question_response(question, include_answer_key: bool) -> dict:
 
 
 # ==================== Exams ====================
+
+@router.post("/analyze-pdfs", response_model=ExamPDFImportResponse)
+async def analyze_exam_pdfs(
+    exam_file: UploadFile = File(...),
+    answer_key_file: Optional[UploadFile] = File(None),
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Extrai questões e gabaritos de PDFs sem salvar ou publicar a prova."""
+
+    async def read_pdf(upload: UploadFile | None, label: str) -> bytes | None:
+        if upload is None:
+            return None
+        if Path((upload.filename or "").replace("\\", "/")).suffix.lower() != ".pdf":
+            raise HTTPException(status_code=422, detail=f"Envie um arquivo PDF para {label}.")
+        try:
+            content = await upload.read(settings.max_upload_size_mb * 1024 * 1024 + 1)
+        finally:
+            await upload.close()
+        if len(content) > settings.max_upload_size_mb * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail=f"O arquivo {label} excede o limite de {settings.max_upload_size_mb} MB.",
+            )
+        if b"%PDF-" not in content[:1024]:
+            raise HTTPException(status_code=422, detail=f"O arquivo enviado para {label} não é um PDF válido.")
+        return content
+
+    exam_content = await read_pdf(exam_file, "a prova")
+    answer_key_content = await read_pdf(answer_key_file, "o gabarito")
+    return await ExamPDFImportService(db).analyze(exam_content, answer_key_content)
+
 
 @router.post("/complete", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
 def create_complete_exam(
@@ -136,6 +171,33 @@ def list_exams(
         total_pages=(total + params.page_size - 1) // params.page_size,
         has_next=params.page * params.page_size < total, has_prev=params.page > 1,
     )
+
+
+@router.get("/versions/active")
+def list_active_exam_versions(
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Lista versões publicadas disponíveis para receber provas respondidas."""
+    versions = (
+        db.query(ExamVersion)
+        .join(Exam, Exam.id == ExamVersion.exam_id)
+        .filter(ExamVersion.is_active.is_(True), Exam.status == ExamStatus.PUBLISHED)
+        .order_by(Exam.title, ExamVersion.version_number.desc())
+        .all()
+    )
+    return [
+        {
+            "version_id": str(version.id),
+            "exam_id": str(version.exam_id),
+            "title": version.title,
+            "version_number": version.version_number,
+            "class_id": str(version.exam.class_id),
+            "class_name": version.exam.class_.name,
+            "subject_name": version.exam.subject.name,
+        }
+        for version in versions
+    ]
 
 
 @router.get("/{exam_id:uuid}", response_model=ExamWithRelations)
