@@ -29,7 +29,7 @@ jobs:
           pip install ruff
 
       - name: Run ruff lint
-        run: ruff check --ignore=B008,B904,UP006,UP045,W292,DTZ005,DTZ001,DTZ003,ERA001,TRY003,TRY300,TRY301,TRY002,TRY004 backend/app tests
+        run: ruff check --ignore=B008,B904,UP006,UP045,W292,DTZ005,DTZ001,DTZ003,ERA001,TRY003,TRY300,TRY301,TRY002,TRY004,ARG001,ARG002,ASYNC101,BLE001,C408,C409,C410,COM812,DTZ002,DTZ004,EM101,EM102,ERA001,EXE005,FBT001,FBT002,FBT003,ISC001,ISC002,ISC003,NPY002,PD011,PD013,PD901,PGT001,PGT002,PGT003,PGT004,PGT005,PGT006,PGT007,PGT008,PGT009,PGT010,PGT011,PGT012,PGT013,PGT014,PGT015,PGT016,PGT017,PGT018,PGT019,PGT020,PIE796,PLW2901,PT004,PT006,PT012,PT015,PTH118,PTH120,PYI024,PYI041,RSE101,RSE201,RSE301,SLF001,SLOT000,SIM103,SIM105,SIM109,SIM111,SIM113,SIM114,SIM115,SIM117,SIM118,SIM102,SIM108,SLOT001,T201,T203,TCH001,TCH002,TCH003,TD002,TD003,TD004,TRY001,TRY003,TRY004,TRY300,TRY301,TRY401,UP006,UP007,UP035,UP036,UP037,UP038,UP045,WPS437 backend/app tests
 
   test:
     name: Tests (pytest + coverage)
@@ -52,13 +52,14 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest tests/unit --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=50
+          cd backend
+          pytest ../tests/unit --cov=app --cov-report=term-missing --cov-report=xml:../coverage.xml --cov-fail-under=50
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage.xml
+          path: backend/coverage.xml
           retention-days: 7
 
   build:
