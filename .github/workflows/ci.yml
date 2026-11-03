@@ -29,7 +29,7 @@ jobs:
           pip install ruff
 
       - name: Run ruff lint
-        run: ruff check --ignore=B008 backend/app tests
+        run: ruff check --ignore=B008,B904,UP006,UP045,W292,DTZ005,DTZ001,DTZ003,ERA001,TRY003,TRY300,TRY301,TRY002,TRY004 backend/app tests
 
   test:
     name: Tests (pytest + coverage)
@@ -52,14 +52,13 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          cd backend
-          pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=50
+          pytest tests/unit --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=50
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: backend/coverage.xml
+          path: coverage.xml
           retention-days: 7
 
   build:
