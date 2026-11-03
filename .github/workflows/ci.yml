@@ -2,100 +2,110 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [develop, main]
+    branches: [main, develop]
   pull_request:
-    branches: [develop, main]
+    branches: [main, develop]
 
 env:
   PYTHON_VERSION: "3.11"
-  COVERAGE_THRESHOLD: 80
 
 jobs:
   lint:
-    name: Lint & Format
+    name: Lint (ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install ruff black
-      - run: ruff check . --output-format=github
-      - run: black --check --diff .
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run ruff lint
+        run: ruff check backend/app tests
 
   test:
-    name: Tests & Coverage
+    name: Tests (pytest + coverage)
     runs-on: ubuntu-latest
-    needs: lint
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - name: Install system deps (OCR)
+
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr libtesseract-dev poppler-utils
-      - name: Install Python deps
-        run: |
+          python -m pip install --upgrade pip
           pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio httpx
+          pip install pytest pytest-cov pytest-asyncio pytest-mock faker
+
       - name: Run tests with coverage
         run: |
-          coverage run -m pytest -v --tb=short
-          coverage xml -o coverage.xml
-          coverage html -d htmlcov
-      - name: Check coverage threshold
-        run: |
-          COV=$(coverage report --format=total)
-          echo "Coverage: ${COV}%"
-          if [ "$COV" -lt ${{ env.COVERAGE_THRESHOLD }} ]; then
-            echo "::error::Coverage ${COV}% below ${{ env.COVERAGE_THRESHOLD }}%"
-            exit 1
-          fi
+          cd backend
+          pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=80
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: htmlcov/
-          retention-days: 7
-      - name: Upload coverage.xml
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-xml
-          path: coverage.xml
+          path: backend/coverage.xml
           retention-days: 7
 
   build:
-    name: Build Check
+    name: Build & Verify Imports
     runs-on: ubuntu-latest
-    needs: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
-      - run: python -c "import app; print('✅  App imports OK')"
 
-  evidence:
-    name: Generate Evidence
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
+
+      - name: Verify imports / syntax
+        run: |
+          cd backend
+          python -c "import app; print('✅  App imports OK')"
+
+      - name: Check Alembic migrations
+        run: |
+          cd backend
+          alembic check
+
+  notify:
+    name: Notify Status
     runs-on: ubuntu-latest
     needs: [lint, test, build]
     if: always()
     steps:
-      - uses: actions/checkout@v4
-      - name: Summary for presentation
+      - name: Job status
         run: |
-          echo "## CI/CD Evidence Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint (ruff + black) | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests + Coverage (≥${{ env.COVERAGE_THRESHOLD }}%) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build (import OK) | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> Use este resumo no **ROTEIRO_APRESENTACAO_A3.md** e slides." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.lint.result }}" == "success" ] && \
+             [ "${{ needs.test.result }}" == "success" ] && \
+             [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅  All checks passed!"
+          else
+            echo "❌  Some checks failed"
+            echo "Lint: ${{ needs.lint.result }}"
+            echo "Test: ${{ needs.test.result }}"
+            echo "Build: ${{ needs.build.result }}"
+            exit 1
+          fi
