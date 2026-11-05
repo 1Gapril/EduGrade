@@ -11,7 +11,15 @@ from sqlalchemy.pool import StaticPool
 from backend.app.core.database import Base, get_db
 from backend.app.core.security import get_current_active_user
 from backend.app.main import app
-from backend.app.models.academic import AcademicPeriod, Class, Course, Subject
+from backend.app.models.academic import (
+    AcademicAssignment,
+    AcademicPeriod,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Subject,
+)
 from backend.app.models.exam import (
     AnswerKey,
     Exam,
@@ -98,6 +106,7 @@ def authorization_api():
         academic_period=period,
         created_by=admin.id,
         total_score=Decimal("10.00"),
+        status=ExamStatus.PUBLISHED,
     )
     version = ExamVersion(
         exam=exam,
@@ -146,6 +155,28 @@ def authorization_api():
         status=SubmissionStatus.UPLOADED,
         original_files=["private/other.pdf"],
     )
+    teacher_assignment = AcademicAssignment(
+        teacher=teacher,
+        subject=subject,
+        class_=class_,
+        academic_period=period,
+        assigned_by=admin.id,
+        permissions={
+            "view_history": True,
+            "receive_submissions": True,
+            "create_assessments": True,
+            "manage_answer_keys": True,
+        },
+    )
+    student_enrollments = [
+        Enrollment(
+            student=profile,
+            class_=class_,
+            academic_period=period,
+            status=EnrollmentStatus.ACTIVE,
+        )
+        for profile in (student, other_student)
+    ]
     db.add_all(
         [
             admin,
@@ -166,6 +197,8 @@ def authorization_api():
             other_copy,
             own_submission,
             other_submission,
+            teacher_assignment,
+            *student_enrollments,
         ]
     )
     db.commit()
@@ -274,6 +307,56 @@ def test_students_only_list_and_read_their_own_limited_submissions(authorization
     assert own.json()["id"] == str(own_id)
     assert set(own.json()) == {"id", "status", "submitted_at", "processed_at"}
     assert other.status_code == 404
+
+
+def test_submission_identification_requires_active_class_enrollment(authorization_api):
+    outside_user = User(
+        id=uuid4(),
+        email="outside-student@example.org",
+        username="outside-student",
+        hashed_password="not-a-real-password",
+        full_name="Outside Student",
+        role=UserRole.STUDENT,
+    )
+    outside_student = Student(
+        user=outside_user,
+        ra="OUTSIDE-RA",
+        registration_number="OUTSIDE-MAT",
+    )
+    authorization_api["db"].add_all([outside_user, outside_student])
+    authorization_api["db"].commit()
+    authorization_api["actor"][0] = authorization_api["teacher_user"]
+
+    wrong_copy_student = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(authorization_api["other_student"].id),
+            "confidence": "99",
+        },
+    )
+    assert wrong_copy_student.status_code == 400
+    assert wrong_copy_student.json()["error"] == "ValidationError"
+
+    response = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(outside_student.id),
+            "confidence": "99",
+            "manual": "true",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "ValidationError"
+
+    enrolled = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(authorization_api["student"].id),
+            "confidence": "99",
+        },
+    )
+    assert enrolled.status_code == 200
 
 
 def test_students_do_not_receive_answer_keys_but_staff_can(authorization_api):

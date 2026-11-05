@@ -15,6 +15,8 @@ const WORKSPACE_SCREENS = {
     title: 'Cursos e disciplinas',
     description: 'Cursos e disciplinas cadastrados.',
     roles: ['admin'],
+    teacherSubjects: true,
+    subjectManagement: true,
     endpoints: [
       { title: 'Cursos', endpoint: '/academic/courses?page=1&page_size=100' },
       { title: 'Disciplinas', endpoint: '/academic/subjects?page=1&page_size=100' },
@@ -25,6 +27,7 @@ const WORKSPACE_SCREENS = {
     description: 'Turmas cadastradas no período letivo.',
     roles: ['admin'],
     endpoint: '/academic/classes?page=1&page_size=100',
+    classManagement: true,
   },
   '/admin/periods.html': {
     title: 'Períodos letivos',
@@ -37,6 +40,12 @@ const WORKSPACE_SCREENS = {
     description: 'Atividades recentes registradas no sistema.',
     roles: ['admin'],
     endpoint: '/audit/recent',
+  },
+  '/admin/quality.html': {
+    title: 'Qualidade e cobertura de testes',
+    description: 'Resultados reais da última execução de cobertura.',
+    roles: ['admin'],
+    quality: true,
   },
   '/admin/ai-status.html': {
     title: 'Status da inteligência artificial',
@@ -133,7 +142,13 @@ const WORKSPACE_SCREENS = {
     title: 'Minhas turmas',
     description: 'Turmas disponíveis no sistema.',
     roles: ['teacher'],
-    endpoint: '/academic/classes?page=1&page_size=100',
+    endpoint: '/academic/classes/my?page=1&page_size=100',
+  },
+  '/professor/students.html': {
+    title: 'Alunos das minhas turmas',
+    description: 'Consulte e mantenha os dados acadêmicos de alunos nas turmas autorizadas.',
+    roles: ['teacher'],
+    teacherStudents: true,
   },
   '/professor/corrections.html': {
     title: 'Correções pendentes',
@@ -143,22 +158,22 @@ const WORKSPACE_SCREENS = {
   },
   '/professor/grades.html': {
     title: 'Lançar notas',
-    description: 'A consulta de notas ainda não está disponível pela API.',
+    description: 'Registre, revise e publique notas das turmas em que possui autorização.',
     roles: ['teacher'],
-    message: 'O lançamento de notas existe na API, mas esta tela ainda não possui formulário para selecionar turma e aluno.',
+    gradeManagement: true,
   },
   '/professor/class-detail.html': {
     title: 'Detalhes da turma',
     description: 'Turmas cadastradas no sistema.',
     roles: ['teacher'],
-    endpoint: '/academic/classes?page=1&page_size=100',
+    endpoint: '/academic/classes/my?page=1&page_size=100',
     classDetail: true,
   },
   '/aluno/grades.html': {
     title: 'Minhas notas',
-    description: 'A consulta de notas do aluno ainda não está disponível pela API.',
+    description: 'Notas publicadas nas suas matrículas ativas.',
     roles: ['student'],
-    message: 'O sistema ainda não possui uma operação de consulta de notas para esta tela.',
+    endpoint: '/academic/grades/my?page=1&page_size=100',
   },
   '/aluno/attendance.html': {
     title: 'Frequência',
@@ -361,7 +376,7 @@ function createUserCell(value) {
   return cell;
 }
 
-function renderUsersTable(container, users) {
+function renderUsersTable(container, users, profilesByUserId) {
   const table = document.createElement('table');
   table.innerHTML = `
     <thead>
@@ -401,12 +416,20 @@ function renderUsersTable(container, users) {
       label.textContent = 'Conta atual';
       actions.appendChild(label);
     } else {
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'btn btn-secondary btn-sm';
+      editButton.dataset.editUserId = user.id;
+      editButton.textContent = 'Editar';
+      actions.appendChild(editButton);
+
       const button = document.createElement('button');
       button.type = 'button';
       button.className = user.is_active ? 'btn btn-danger btn-sm' : 'btn btn-secondary btn-sm';
       button.dataset.userId = user.id;
       button.dataset.nextActive = String(!user.is_active);
       button.textContent = user.is_active ? 'Desativar' : 'Reativar';
+      button.classList.add('workspace-user-status-action');
       actions.appendChild(button);
     }
     row.appendChild(actions);
@@ -451,6 +474,22 @@ async function loadAdminUsersScreen(container) {
         <option value="admin">Administrador</option>
       </select>
     </div>
+    <div class="form-group" id="student-profile-fields">
+      <label class="form-label" for="new-student-ra">RA do aluno</label>
+      <input class="form-input" id="new-student-ra" name="student_ra" maxlength="50">
+      <label class="form-label" for="new-student-registration-number">Matrícula institucional</label>
+      <input class="form-input" id="new-student-registration-number" name="student_registration_number" maxlength="50">
+      <label class="form-label" for="new-student-class">Turma inicial (opcional)</label>
+      <select class="form-input" id="new-student-class" name="student_class_id">
+        <option value="">Sem turma inicial</option>
+      </select>
+    </div>
+    <div class="form-group" id="teacher-profile-fields" hidden>
+      <label class="form-label" for="new-teacher-employee-id">Identificação funcional</label>
+      <input class="form-input" id="new-teacher-employee-id" name="teacher_employee_id" maxlength="50">
+      <label class="form-label" for="new-teacher-department">Departamento</label>
+      <input class="form-input" id="new-teacher-department" name="teacher_department" maxlength="100">
+    </div>
     <div class="workspace-form-actions">
       <button class="btn btn-primary" type="submit">Criar usuário</button>
     </div>
@@ -460,9 +499,48 @@ async function loadAdminUsersScreen(container) {
   message.className = 'workspace-message';
   message.id = 'users-message';
   message.hidden = true;
+  const editForm = document.createElement('form');
+  editForm.className = 'workspace-form';
+  editForm.hidden = true;
+  editForm.innerHTML = `
+    <h2>Editar usuário e perfil acadêmico</h2>
+    <div class="form-group">
+      <label class="form-label" for="edit-user-name">Nome completo</label>
+      <input class="form-input" id="edit-user-name" required minlength="2" maxlength="255">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="edit-user-username">Usuário</label>
+      <input class="form-input" id="edit-user-username" required minlength="3" maxlength="100">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="edit-user-email">E-mail</label>
+      <input class="form-input" id="edit-user-email" type="email" required>
+    </div>
+    <p id="edit-user-role"></p>
+    <div class="form-group" id="edit-student-fields" hidden>
+      <label class="form-label" for="edit-student-ra">RA</label>
+      <input class="form-input" id="edit-student-ra" required maxlength="50">
+      <label class="form-label" for="edit-student-registration">Matrícula institucional</label>
+      <input class="form-input" id="edit-student-registration" maxlength="50">
+      <label class="form-label" for="edit-student-status">Situação acadêmica</label>
+      <input class="form-input" id="edit-student-status" required maxlength="50">
+    </div>
+    <div class="form-group" id="edit-teacher-fields" hidden>
+      <label class="form-label" for="edit-teacher-employee-id">Identificação funcional</label>
+      <input class="form-input" id="edit-teacher-employee-id" required maxlength="50">
+      <label class="form-label" for="edit-teacher-department">Departamento</label>
+      <input class="form-input" id="edit-teacher-department" maxlength="100">
+      <label class="form-label" for="edit-teacher-status">Status do professor</label>
+      <input class="form-input" id="edit-teacher-status" required maxlength="50">
+    </div>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" type="submit">Salvar alterações</button>
+      <button class="btn btn-secondary" type="button" id="edit-user-cancel">Cancelar</button>
+    </div>
+  `;
   const tableContainer = document.createElement('div');
   tableContainer.className = 'workspace-table-wrap';
-  container.replaceChildren(form, message, tableContainer);
+  container.replaceChildren(form, editForm, message, tableContainer);
 
   const showMessage = (text, isError = false) => {
     message.textContent = text;
@@ -470,11 +548,94 @@ async function loadAdminUsersScreen(container) {
     message.classList.toggle('workspace-error', isError);
   };
 
+  const roleSelect = form.querySelector('#new-user-role');
+  const studentFields = form.querySelector('#student-profile-fields');
+  const studentRa = form.querySelector('#new-student-ra');
+  const studentRegistrationNumber = form.querySelector('#new-student-registration-number');
+  const teacherFields = form.querySelector('#teacher-profile-fields');
+  const teacherEmployeeId = form.querySelector('#new-teacher-employee-id');
+  const studentClass = form.querySelector('#new-student-class');
+  let users = [];
+  let profilesByUserId = new Map();
+  let editingUser = null;
+  const updateProfileFields = () => {
+    studentFields.hidden = roleSelect.value !== 'student';
+    studentRa.required = roleSelect.value === 'student';
+    studentRegistrationNumber.required = roleSelect.value === 'student';
+    teacherFields.hidden = roleSelect.value !== 'teacher';
+    teacherEmployeeId.required = roleSelect.value === 'teacher';
+  };
+  const requestedRole = new URLSearchParams(window.location.search).get('role');
+  if (['student', 'teacher', 'admin'].includes(requestedRole)) roleSelect.value = requestedRole;
+  roleSelect.addEventListener('change', updateProfileFields);
+  updateProfileFields();
+  const classResponse = await api.request('/academic/classes?page=1&page_size=100');
+  for (const classRecord of classResponse.items || []) {
+    studentClass.add(new Option(`${classRecord.code} — ${classRecord.name}`, classRecord.id));
+  }
+
   const refreshUsers = async () => {
     tableContainer.textContent = 'Carregando usuários...';
-    const response = await api.request('/users?page=1&page_size=100&active_only=false');
-    renderUsersTable(tableContainer, response.items || []);
+    const role = new URLSearchParams(window.location.search).get('role');
+    const roleFilter = ['student', 'teacher', 'admin'].includes(role) ? `&role=${encodeURIComponent(role)}` : '';
+    const [userResponse, studentResponse, teacherResponse] = await Promise.all([
+      api.request(`/users?page=1&page_size=100&active_only=false${roleFilter}`),
+      api.request('/users/students?page=1&page_size=100'),
+      api.request('/users/teachers?page=1&page_size=100'),
+    ]);
+    users = userResponse.items || [];
+    profilesByUserId = new Map([
+      ...normalizeRows(studentResponse).map(profile => [profile.user_id, profile]),
+      ...normalizeRows(teacherResponse).map(profile => [profile.user_id, profile]),
+    ]);
+    renderUsersTable(tableContainer, users, profilesByUserId);
   };
+
+  const closeEditForm = () => {
+    editingUser = null;
+    editForm.reset();
+    editForm.hidden = true;
+  };
+  editForm.querySelector('#edit-user-cancel').addEventListener('click', closeEditForm);
+  editForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!editingUser) return;
+    const button = editForm.querySelector('button[type="submit"]');
+    UI.setLoading(button, true);
+    try {
+      const user = {
+        full_name: editForm.querySelector('#edit-user-name').value,
+        username: editForm.querySelector('#edit-user-username').value,
+        email: editForm.querySelector('#edit-user-email').value,
+      };
+      const profile = profilesByUserId.get(editingUser.id);
+      const update = { user };
+      if (editingUser.role === 'student' && profile) {
+        update.student = {
+          ra: editForm.querySelector('#edit-student-ra').value,
+          registration_number: editForm.querySelector('#edit-student-registration').value || null,
+          status: editForm.querySelector('#edit-student-status').value,
+        };
+      } else if (editingUser.role === 'teacher' && profile) {
+        update.teacher = {
+          employee_id: editForm.querySelector('#edit-teacher-employee-id').value,
+          department: editForm.querySelector('#edit-teacher-department').value || null,
+          status: editForm.querySelector('#edit-teacher-status').value,
+        };
+      }
+      await api.request(`/users/${editingUser.id}/academic-profile`, {
+        method: 'PATCH',
+        body: update,
+      });
+      closeEditForm();
+      showMessage('Usuário e perfil acadêmico atualizados com sucesso.');
+      await refreshUsers();
+    } catch (error) {
+      showMessage(error.message || 'Não foi possível atualizar o perfil.', true);
+    } finally {
+      UI.setLoading(button, false);
+    }
+  });
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -483,7 +644,28 @@ async function loadAdminUsersScreen(container) {
     message.hidden = true;
     try {
       const data = Object.fromEntries(new FormData(form).entries());
-      await api.create('/users', data);
+      if (data.role === 'student' || data.role === 'teacher') {
+        const user = {
+          full_name: data.full_name,
+          username: data.username,
+          email: data.email,
+          password: data.password,
+          role: data.role,
+        };
+        const profile = data.role === 'student'
+          ? {
+              student_ra: data.student_ra,
+              student_registration_number: data.student_registration_number,
+              student_class_id: data.student_class_id || null,
+            }
+          : {
+              teacher_employee_id: data.teacher_employee_id,
+              teacher_department: data.teacher_department || null,
+            };
+        await api.create('/users/provision', { user, ...profile });
+      } else {
+        await api.create('/users', data);
+      }
       form.reset();
       showMessage('Usuário criado com sucesso.');
       await refreshUsers();
@@ -495,6 +677,37 @@ async function loadAdminUsersScreen(container) {
   });
 
   tableContainer.addEventListener('click', async event => {
+    const editButton = event.target.closest('button[data-edit-user-id]');
+    if (editButton) {
+      editingUser = users.find(user => user.id === editButton.dataset.editUserId);
+      if (!editingUser) return;
+      const profile = profilesByUserId.get(editingUser.id);
+      editForm.querySelector('#edit-user-name').value = editingUser.full_name;
+      editForm.querySelector('#edit-user-username').value = editingUser.username;
+      editForm.querySelector('#edit-user-email').value = editingUser.email;
+      editForm.querySelector('#edit-user-role').textContent =
+        `Perfil: ${{ admin: 'Administrador', teacher: 'Professor', student: 'Aluno' }[editingUser.role] || editingUser.role}`;
+      const studentFields = editForm.querySelector('#edit-student-fields');
+      const teacherFields = editForm.querySelector('#edit-teacher-fields');
+      studentFields.hidden = editingUser.role !== 'student' || !profile;
+      teacherFields.hidden = editingUser.role !== 'teacher' || !profile;
+      editForm.querySelector('#edit-student-ra').required = !studentFields.hidden;
+      editForm.querySelector('#edit-teacher-employee-id').required = !teacherFields.hidden;
+      if (editingUser.role === 'student' && profile) {
+        editForm.querySelector('#edit-student-ra').value = profile.ra;
+        editForm.querySelector('#edit-student-registration').value = profile.registration_number || '';
+        editForm.querySelector('#edit-student-status').value = profile.status;
+      }
+      if (editingUser.role === 'teacher' && profile) {
+        editForm.querySelector('#edit-teacher-employee-id').value = profile.employee_id;
+        editForm.querySelector('#edit-teacher-department').value = profile.department || '';
+        editForm.querySelector('#edit-teacher-status').value = profile.status;
+      }
+      editForm.hidden = false;
+      editForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
     const button = event.target.closest('button[data-user-id]');
     if (!button) return;
 
@@ -1009,6 +1222,16 @@ async function loadCreateExamScreen(container, editExamId = null) {
       periodId.value = selected?.dataset.periodId || '';
       periodName.value = selected?.dataset.periodName || '';
     });
+
+    // Preseleciona a turma informada na URL (ex.: /exams/create.html?class_id=...)
+    const preselectedClassId = new URLSearchParams(window.location.search).get('class_id');
+    if (!editExamId && preselectedClassId) {
+      const option = [...classSelect.options].find(item => item.value === preselectedClassId);
+      if (option) {
+        classSelect.value = preselectedClassId;
+        classSelect.dispatchEvent(new Event('change'));
+      }
+    }
 
     if (classes.length === 0) {
       showWorkspaceMessage(
@@ -1707,6 +1930,758 @@ async function loadPrintExamsScreen(container) {
   }
 }
 
+async function loadQualityScreen(container) {
+  const summary = await api.request('/quality/summary');
+  container.replaceChildren();
+  const history = Array.isArray(summary.history) ? summary.history : [];
+  if (!summary.available && history.length === 0) {
+    showWorkspaceMessage(summary.message || 'Dados de qualidade indisponíveis.', true);
+    return;
+  }
+
+  if (summary.available) {
+    const card = document.createElement('section');
+    card.className = 'card';
+    const title = document.createElement('h2');
+    title.className = 'card-title';
+    title.textContent = `Cobertura: ${summary.coverage_percent}%`;
+    const details = document.createElement('p');
+    details.textContent = `${summary.lines_covered} de ${summary.lines_valid} linhas cobertas. Última execução: ${new Date(summary.generated_at).toLocaleString()}.`;
+    card.append(title, details);
+    if (summary.tests) {
+      const tests = document.createElement('p');
+      tests.textContent = `Testes: ${summary.tests.total} total, ${summary.tests.passed} aprovados, ${summary.tests.failed} reprovados, ${summary.tests.skipped} ignorados.`;
+      card.appendChild(tests);
+    } else {
+      const tests = document.createElement('p');
+      tests.textContent = 'Contagem de testes indisponível para esta execução.';
+      card.appendChild(tests);
+    }
+    if (summary.html_report_available) {
+      const link = document.createElement('a');
+      link.className = 'btn btn-secondary';
+      link.href = '/api/v1/quality/report/index.html';
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Abrir relatório HTML detalhado';
+      card.appendChild(link);
+    }
+    container.appendChild(card);
+  }
+
+  if (history.length > 0) {
+    const historyCard = document.createElement('section');
+    historyCard.className = 'card';
+    const title = document.createElement('h2');
+    title.className = 'card-title';
+    title.textContent = 'Histórico das últimas execuções';
+    const entries = document.createElement('ul');
+    for (const run of history) {
+      const item = document.createElement('li');
+      const testCount = run.tests ? ` — ${run.tests.passed}/${run.tests.total} testes aprovados` : '';
+      item.textContent = `${new Date(run.generated_at).toLocaleString()} — cobertura ${run.coverage_percent}% (${run.lines_covered}/${run.lines_valid} linhas)${testCount}`;
+      entries.appendChild(item);
+    }
+    historyCard.append(title, entries);
+    container.appendChild(historyCard);
+  }
+}
+
+async function loadAcademicManagementScreen(container) {
+  const section = document.createElement('section');
+  section.className = 'card';
+  const title = document.createElement('h2');
+  title.className = 'card-title';
+  title.textContent = 'Cursos';
+  const courseForm = document.createElement('form');
+  courseForm.className = 'workspace-form';
+  courseForm.innerHTML = `
+    <div class="form-group"><label class="form-label" for="course-code">Código</label><input class="form-input" id="course-code" required maxlength="20"></div>
+    <div class="form-group"><label class="form-label" for="course-name">Nome do curso</label><input class="form-input" id="course-name" required minlength="2" maxlength="255"></div>
+    <div class="form-group"><label class="form-label" for="course-description">Descrição</label><textarea class="form-input" id="course-description"></textarea></div>
+    <div class="form-group"><label class="form-label" for="course-duration">Duração (semestres)</label><input class="form-input" id="course-duration" type="number" min="1" max="20" value="8" required></div>
+    <button class="btn btn-primary" type="submit">Cadastrar curso</button>
+  `;
+  const courseMessage = document.createElement('p');
+  courseMessage.setAttribute('role', 'status');
+  const courseTable = document.createElement('div');
+  courseTable.className = 'workspace-table-wrap';
+  section.append(title, courseForm, courseMessage, courseTable);
+
+  const subjectSection = document.createElement('section');
+  subjectSection.className = 'card';
+  const subjectTitle = document.createElement('h2');
+  subjectTitle.className = 'card-title';
+  subjectTitle.textContent = 'Matérias e Disciplinas';
+  const subjectForm = document.createElement('form');
+  subjectForm.className = 'workspace-form';
+  subjectForm.innerHTML = `
+    <div class="form-group"><label class="form-label" for="subject-code">Código</label><input class="form-input" id="subject-code" required maxlength="20"></div>
+    <div class="form-group"><label class="form-label" for="subject-name">Nome</label><input class="form-input" id="subject-name" required minlength="2" maxlength="255"></div>
+    <div class="form-group"><label class="form-label" for="subject-description">Descrição</label><textarea class="form-input" id="subject-description"></textarea></div>
+    <div class="form-group"><label class="form-label" for="subject-course">Curso</label><select class="form-input" id="subject-course" required></select></div>
+    <div class="form-group"><label class="form-label" for="subject-hours">Carga horária</label><input class="form-input" id="subject-hours" type="number" min="1" value="60" required></div>
+    <div class="form-group"><label class="form-label" for="subject-credits">Créditos</label><input class="form-input" id="subject-credits" type="number" min="1" value="4" required></div>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" id="subject-submit" type="submit">Cadastrar matéria</button>
+      <button class="btn btn-secondary" id="subject-cancel" type="button" hidden>Cancelar edição</button>
+    </div>
+  `;
+  const subjectMessage = document.createElement('p');
+  subjectMessage.setAttribute('role', 'status');
+  const subjectTable = document.createElement('div');
+  subjectTable.className = 'workspace-table-wrap';
+  subjectSection.append(subjectTitle, subjectForm, subjectMessage, subjectTable);
+  container.replaceChildren(section, subjectSection);
+
+  let courses = [];
+  let subjects = [];
+  let editingSubjectId = null;
+  const courseSelect = subjectForm.querySelector('#subject-course');
+
+  const refresh = async () => {
+    const [courseResult, subjectResult] = await Promise.all([
+      api.request('/academic/courses?page=1&page_size=100&active_only=false'),
+      api.request('/academic/subjects?page=1&page_size=100'),
+    ]);
+    courses = normalizeRows(courseResult);
+    subjects = normalizeRows(subjectResult);
+    courseSelect.replaceChildren(new Option('Selecione o curso...', ''));
+    courses.filter(course => course.is_active).forEach(course => {
+      courseSelect.add(new Option(`${course.code} — ${course.name}`, course.id));
+    });
+    renderCourses();
+    renderSubjects();
+  };
+
+  function renderCourses() {
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const header = document.createElement('tr');
+    ['Código', 'Curso', 'Duração', 'Status', 'Ações'].forEach(text => {
+      const cell = document.createElement('th');
+      cell.textContent = text;
+      header.append(cell);
+    });
+    table.append(header);
+    courses.forEach(course => {
+      const row = document.createElement('tr');
+      [course.code, course.name, `${course.duration_semesters} semestres`, course.is_active ? 'Ativo' : 'Inativo']
+        .forEach(text => {
+          const cell = document.createElement('td');
+          cell.textContent = text;
+          row.append(cell);
+        });
+      const action = document.createElement('td');
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn btn-secondary btn-sm';
+      toggle.textContent = course.is_active ? 'Desativar' : 'Ativar';
+      toggle.addEventListener('click', () => updateAcademicStatus('courses', course, !course.is_active));
+      action.append(toggle);
+      row.append(action);
+      body.append(row);
+    });
+    table.append(body);
+    courseTable.replaceChildren(table);
+  }
+
+  function renderSubjects() {
+    const courseNames = new Map(courses.map(course => [course.id, course.name]));
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const header = document.createElement('tr');
+    ['Código', 'Matéria', 'Curso', 'Carga horária', 'Status', 'Ações'].forEach(text => {
+      const cell = document.createElement('th');
+      cell.textContent = text;
+      header.append(cell);
+    });
+    table.append(header);
+    subjects.forEach(subject => {
+      const row = document.createElement('tr');
+      [
+        subject.code,
+        subject.name,
+        courseNames.get(subject.course_id) || subject.course_id,
+        `${subject.workload_hours} h`,
+        subject.is_active ? 'Ativa' : 'Inativa',
+      ].forEach(text => {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.append(cell);
+      });
+      const actions = document.createElement('td');
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-secondary btn-sm';
+      edit.textContent = 'Editar';
+      edit.addEventListener('click', () => {
+        editingSubjectId = subject.id;
+        subjectForm.querySelector('#subject-code').value = subject.code;
+        subjectForm.querySelector('#subject-name').value = subject.name;
+        subjectForm.querySelector('#subject-description').value = subject.description || '';
+        subjectForm.querySelector('#subject-course').value = subject.course_id;
+        courseSelect.disabled = true;
+        subjectForm.querySelector('#subject-hours').value = subject.workload_hours;
+        subjectForm.querySelector('#subject-credits').value = subject.credits;
+        subjectForm.querySelector('#subject-submit').textContent = 'Salvar alterações';
+        subjectForm.querySelector('#subject-cancel').hidden = false;
+      });
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn btn-ghost btn-sm';
+      toggle.textContent = subject.is_active ? 'Desativar' : 'Ativar';
+      toggle.addEventListener('click', () => updateAcademicStatus('subjects', subject, !subject.is_active));
+      actions.append(edit, toggle);
+      row.append(actions);
+      body.append(row);
+    });
+    table.append(body);
+    subjectTable.replaceChildren(table);
+  }
+
+  async function updateAcademicStatus(resource, record, isActive) {
+    try {
+      await api.request(`/academic/${resource}/${record.id}`, {
+        method: 'PATCH',
+        body: { is_active: isActive },
+      });
+      await refresh();
+    } catch (error) {
+      subjectMessage.textContent = error.message || 'Não foi possível alterar o status.';
+      subjectMessage.classList.add('workspace-error');
+    }
+  }
+
+  subjectForm.querySelector('#subject-cancel').addEventListener('click', () => {
+    editingSubjectId = null;
+    subjectForm.reset();
+    courseSelect.disabled = false;
+    subjectForm.querySelector('#subject-hours').value = '60';
+    subjectForm.querySelector('#subject-credits').value = '4';
+    subjectForm.querySelector('#subject-submit').textContent = 'Cadastrar matéria';
+    subjectForm.querySelector('#subject-cancel').hidden = true;
+  });
+  courseForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      await api.request('/academic/courses', {
+        method: 'POST',
+        body: {
+          code: courseForm.querySelector('#course-code').value,
+          name: courseForm.querySelector('#course-name').value,
+          description: courseForm.querySelector('#course-description').value || null,
+          duration_semesters: Number(courseForm.querySelector('#course-duration').value),
+        },
+      });
+      courseForm.reset();
+      courseForm.querySelector('#course-duration').value = '8';
+      courseMessage.textContent = 'Curso cadastrado.';
+      await refresh();
+    } catch (error) {
+      courseMessage.textContent = error.message || 'Não foi possível cadastrar o curso.';
+      courseMessage.classList.add('workspace-error');
+    }
+  });
+  subjectForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const payload = {
+      code: subjectForm.querySelector('#subject-code').value,
+      name: subjectForm.querySelector('#subject-name').value,
+      description: subjectForm.querySelector('#subject-description').value || null,
+      course_id: courseSelect.value,
+      workload_hours: Number(subjectForm.querySelector('#subject-hours').value),
+      credits: Number(subjectForm.querySelector('#subject-credits').value),
+    };
+    try {
+      if (editingSubjectId) {
+        await api.request(`/academic/subjects/${editingSubjectId}`, { method: 'PATCH', body: payload });
+      } else {
+        await api.request('/academic/subjects', { method: 'POST', body: payload });
+      }
+      subjectMessage.textContent = editingSubjectId ? 'Matéria atualizada.' : 'Matéria cadastrada.';
+      subjectMessage.classList.remove('workspace-error');
+      subjectForm.reset();
+      courseSelect.disabled = false;
+      editingSubjectId = null;
+      subjectForm.querySelector('#subject-hours').value = '60';
+      subjectForm.querySelector('#subject-credits').value = '4';
+      subjectForm.querySelector('#subject-submit').textContent = 'Cadastrar matéria';
+      subjectForm.querySelector('#subject-cancel').hidden = true;
+      await refresh();
+    } catch (error) {
+      subjectMessage.textContent = error.message || 'Não foi possível salvar a matéria.';
+      subjectMessage.classList.add('workspace-error');
+    }
+  });
+
+  await refresh();
+  await loadTeacherSubjectAdmin(container);
+}
+
+async function loadClassManagementScreen(container) {
+  const [courseResult, subjectResult, periodResult] = await Promise.all([
+    api.request('/academic/courses?page=1&page_size=100'),
+    api.request('/academic/subjects?page=1&page_size=100'),
+    api.request('/academic/periods?page=1&page_size=100'),
+  ]);
+  const courses = normalizeRows(courseResult);
+  const subjects = normalizeRows(subjectResult);
+  const periods = normalizeRows(periodResult);
+  let classes = [];
+  let students = [];
+  let enrollments = [];
+  let editingClassId = null;
+  const classSection = document.createElement('section');
+  classSection.className = 'card';
+  const classTitle = document.createElement('h2');
+  classTitle.className = 'card-title';
+  classTitle.textContent = 'Cadastrar turma';
+  const classForm = document.createElement('form');
+  classForm.className = 'workspace-form';
+  classForm.innerHTML = `
+    <div class="form-group"><label class="form-label" for="class-code">Código</label><input class="form-input" id="class-code" required maxlength="20"></div>
+    <div class="form-group"><label class="form-label" for="class-name">Nome</label><input class="form-input" id="class-name" required maxlength="255"></div>
+    <div class="form-group" data-context-field><label class="form-label" for="class-course">Curso</label><select class="form-input" id="class-course" required></select></div>
+    <div class="form-group" data-context-field><label class="form-label" for="class-subject">Matéria</label><select class="form-input" id="class-subject" required></select></div>
+    <div class="form-group" data-context-field><label class="form-label" for="class-period">Período letivo</label><select class="form-input" id="class-period" required></select></div>
+    <div class="form-group" data-context-field><label class="form-label" for="class-semester">Semestre</label><input class="form-input" id="class-semester" type="number" min="1" max="20" value="1" required></div>
+    <div class="form-group" data-context-field><label class="form-label" for="class-year">Ano</label><input class="form-input" id="class-year" type="number" min="2000" max="2100" value="${new Date().getFullYear()}" required></div>
+    <div class="form-group"><label class="form-label" for="class-schedule">Horário</label><input class="form-input" id="class-schedule" maxlength="500"></div>
+    <div class="form-group"><label class="form-label" for="classroom">Sala</label><input class="form-input" id="classroom" maxlength="100"></div>
+    <div class="form-group"><label class="form-label" for="class-capacity">Limite de alunos</label><input class="form-input" id="class-capacity" type="number" min="1" max="200" value="50" required></div>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" type="submit" id="class-submit">Cadastrar turma</button>
+      <button class="btn btn-secondary" type="button" id="class-cancel" hidden>Cancelar edição</button>
+    </div>
+  `;
+  const classMessage = document.createElement('p');
+  classMessage.setAttribute('role', 'status');
+  const classTable = document.createElement('div');
+  classTable.className = 'workspace-table-wrap';
+  classSection.append(classTitle, classForm, classMessage, classTable);
+
+  const enrollmentSection = document.createElement('section');
+  enrollmentSection.className = 'card';
+  const enrollmentTitle = document.createElement('h2');
+  enrollmentTitle.className = 'card-title';
+  enrollmentTitle.textContent = 'Matrículas de alunos';
+  const enrollmentForm = document.createElement('form');
+  enrollmentForm.className = 'workspace-form';
+  enrollmentForm.innerHTML = `
+    <div class="form-group"><label class="form-label" for="enrollment-student">Aluno</label><select class="form-input" id="enrollment-student" required></select></div>
+    <div class="form-group"><label class="form-label" for="enrollment-class">Turma e matéria</label><select class="form-input" id="enrollment-class" required></select></div>
+    <button class="btn btn-primary" type="submit">Matricular aluno</button>
+  `;
+  const enrollmentMessage = document.createElement('p');
+  enrollmentMessage.setAttribute('role', 'status');
+  const enrollmentTable = document.createElement('div');
+  enrollmentTable.className = 'workspace-table-wrap';
+  enrollmentSection.append(enrollmentTitle, enrollmentForm, enrollmentMessage, enrollmentTable);
+  container.replaceChildren(classSection, enrollmentSection);
+
+  const addOptions = (select, rows, label) => {
+    select.replaceChildren(new Option('Selecione...', ''));
+    rows.forEach(row => select.add(new Option(label(row), row.id)));
+  };
+  const courseSelect = classForm.querySelector('#class-course');
+  const subjectSelect = classForm.querySelector('#class-subject');
+  const periodSelect = classForm.querySelector('#class-period');
+  addOptions(courseSelect, courses, row => `${row.code} — ${row.name}`);
+  addOptions(periodSelect, periods, row => `${row.name} (${row.code})`);
+  const updateSubjects = () => addOptions(
+    subjectSelect,
+    subjects.filter(subject => subject.course_id === courseSelect.value),
+    row => `${row.code} — ${row.name}`,
+  );
+  courseSelect.addEventListener('change', updateSubjects);
+  updateSubjects();
+
+  const resetClassForm = () => {
+    editingClassId = null;
+    classForm.reset();
+    classForm.querySelectorAll('[data-context-field]').forEach(field => { field.hidden = false; });
+    classTitle.textContent = 'Cadastrar turma';
+    classForm.querySelector('#class-submit').textContent = 'Cadastrar turma';
+    classForm.querySelector('#class-cancel').hidden = true;
+    courseSelect.disabled = false;
+    subjectSelect.disabled = false;
+    periodSelect.disabled = false;
+    updateSubjects();
+  };
+  classForm.querySelector('#class-cancel').addEventListener('click', resetClassForm);
+
+  const refresh = async () => {
+    const [classResult, studentResult, enrollmentResult] = await Promise.all([
+      api.request('/academic/classes?page=1&page_size=100'),
+      api.request('/users/students?page=1&page_size=100'),
+      api.request('/academic/enrollments?page=1&page_size=100'),
+    ]);
+    classes = normalizeRows(classResult);
+    students = normalizeRows(studentResult);
+    enrollments = normalizeRows(enrollmentResult);
+    addOptions(
+      enrollmentForm.querySelector('#enrollment-student'),
+      students,
+      student => `${student.user?.full_name || student.ra} — RA ${student.ra}`,
+    );
+    addOptions(
+      enrollmentForm.querySelector('#enrollment-class'),
+      classes,
+      classRecord => `${classRecord.code} — ${classRecord.name}`,
+    );
+    renderClasses();
+    renderEnrollments();
+  };
+
+  function renderClasses() {
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const header = document.createElement('tr');
+    ['Turma', 'Matéria', 'Período', 'Alunos ativos', 'Ações'].forEach(text => {
+      const cell = document.createElement('th');
+      cell.textContent = text;
+      header.append(cell);
+    });
+    table.append(header);
+    classes.forEach(classRecord => {
+      const row = document.createElement('tr');
+      [
+        `${classRecord.code} — ${classRecord.name}`,
+        classRecord.subject?.name || classRecord.subject_id,
+        classRecord.academic_period?.name || classRecord.academic_period_id,
+        String(classRecord.enrollments_count ?? 0),
+      ].forEach(text => {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.append(cell);
+      });
+      const actions = document.createElement('td');
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-secondary btn-sm';
+      edit.textContent = 'Editar turma';
+      edit.addEventListener('click', () => {
+        editingClassId = classRecord.id;
+        classTitle.textContent = 'Editar turma';
+        classForm.querySelector('#class-submit').textContent = 'Salvar alterações';
+        classForm.querySelector('#class-cancel').hidden = false;
+        classForm.querySelector('#class-code').value = classRecord.code;
+        classForm.querySelector('#class-name').value = classRecord.name;
+        classForm.querySelector('#class-schedule').value = classRecord.schedule || '';
+        classForm.querySelector('#classroom').value = classRecord.classroom || '';
+        classForm.querySelector('#class-capacity').value = classRecord.max_students;
+        classForm.querySelectorAll('[data-context-field]').forEach(field => { field.hidden = true; });
+      });
+      actions.append(edit);
+      row.append(actions);
+      body.append(row);
+    });
+    table.append(body);
+    classTable.replaceChildren(table);
+  }
+
+  function renderEnrollments() {
+    const studentById = new Map(students.map(student => [student.id, student]));
+    const classById = new Map(classes.map(classRecord => [classRecord.id, classRecord]));
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const header = document.createElement('tr');
+    ['Aluno', 'Turma', 'Período', 'Status', 'Ações'].forEach(text => {
+      const cell = document.createElement('th');
+      cell.textContent = text;
+      header.append(cell);
+    });
+    table.append(header);
+    enrollments.forEach(enrollment => {
+      const student = studentById.get(enrollment.student_id);
+      const classRecord = classById.get(enrollment.class_id);
+      const row = document.createElement('tr');
+      [
+        `${student?.user?.full_name || student?.ra || enrollment.student_id} (RA ${student?.ra || '—'})`,
+        classRecord?.name || enrollment.class_id,
+        enrollment.academic_period?.name || enrollment.academic_period_id,
+        enrollment.status,
+      ].forEach(text => {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.append(cell);
+      });
+      const actionCell = document.createElement('td');
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'btn btn-secondary btn-sm';
+      toggle.textContent = enrollment.status === 'active' ? 'Desativar matrícula' : 'Reativar matrícula';
+      toggle.addEventListener('click', async () => {
+        try {
+          await api.request(`/academic/enrollments/${enrollment.id}`, {
+            method: 'PATCH',
+            body: { status: enrollment.status === 'active' ? 'inactive' : 'active' },
+          });
+          await refresh();
+        } catch (error) {
+          enrollmentMessage.textContent = error.message || 'Não foi possível alterar a matrícula.';
+          enrollmentMessage.classList.add('workspace-error');
+        }
+      });
+      actionCell.append(toggle);
+      row.append(actionCell);
+      body.append(row);
+    });
+    table.append(body);
+    enrollmentTable.replaceChildren(table);
+  }
+
+  classForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const payload = {
+      code: classForm.querySelector('#class-code').value,
+      name: classForm.querySelector('#class-name').value,
+      schedule: classForm.querySelector('#class-schedule').value || null,
+      classroom: classForm.querySelector('#classroom').value || null,
+      max_students: Number(classForm.querySelector('#class-capacity').value),
+    };
+    try {
+      if (editingClassId) {
+        await api.request(`/academic/classes/${editingClassId}`, { method: 'PATCH', body: payload });
+      } else {
+        Object.assign(payload, {
+          course_id: courseSelect.value,
+          subject_id: subjectSelect.value,
+          academic_period_id: periodSelect.value,
+          semester: Number(classForm.querySelector('#class-semester').value),
+          year: Number(classForm.querySelector('#class-year').value),
+        });
+        await api.request('/academic/classes', { method: 'POST', body: payload });
+      }
+      classMessage.textContent = editingClassId ? 'Turma atualizada.' : 'Turma cadastrada.';
+      classMessage.classList.remove('workspace-error');
+      resetClassForm();
+      await refresh();
+    } catch (error) {
+      classMessage.textContent = error.message || 'Não foi possível salvar a turma.';
+      classMessage.classList.add('workspace-error');
+    }
+  });
+
+  enrollmentForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const classRecord = classes.find(
+      item => item.id === enrollmentForm.querySelector('#enrollment-class').value,
+    );
+    if (!classRecord) return;
+    try {
+      await api.request('/academic/enrollments', {
+        method: 'POST',
+        body: {
+          student_id: enrollmentForm.querySelector('#enrollment-student').value,
+          class_id: classRecord.id,
+          academic_period_id: classRecord.academic_period_id,
+        },
+      });
+      enrollmentMessage.textContent = 'Matrícula criada.';
+      enrollmentMessage.classList.remove('workspace-error');
+      enrollmentForm.reset();
+      await refresh();
+    } catch (error) {
+      enrollmentMessage.textContent = error.message || 'Não foi possível matricular o aluno.';
+      enrollmentMessage.classList.add('workspace-error');
+    }
+  });
+
+  await refresh();
+}
+
+async function loadTeacherSubjectAdmin(container) {
+  const section = document.createElement('section');
+  section.className = 'card';
+  const heading = document.createElement('h2');
+  heading.className = 'card-title';
+  heading.textContent = 'Vínculos de professores e disciplinas';
+  section.appendChild(heading);
+
+  const [teacherData, subjectData, periodData, associationData] = await Promise.all([
+    api.request('/users/teachers?page=1&page_size=100'),
+    api.request('/academic/subjects?page=1&page_size=100'),
+    api.request('/academic/periods?page=1&page_size=100'),
+    api.request('/academic/teacher-subjects?page=1&page_size=100'),
+  ]);
+  const teachers = normalizeRows(teacherData);
+  const subjects = normalizeRows(subjectData);
+  const periods = normalizeRows(periodData);
+  let associations = normalizeRows(associationData);
+
+  const form = document.createElement('form');
+  form.className = 'workspace-form';
+  const fields = [
+    {
+      label: 'Professor',
+      rows: teachers,
+      getValue: row => row.id,
+      getLabel: row => row.user?.full_name || row.user?.email || row.id,
+      placeholder: 'Selecione o professor',
+    },
+    {
+      label: 'Disciplina',
+      rows: subjects,
+      getValue: row => row.id,
+      getLabel: row => `${row.code} — ${row.name}`,
+      placeholder: 'Selecione a disciplina',
+    },
+    {
+      label: 'Período letivo',
+      rows: periods,
+      getValue: row => row.id,
+      getLabel: row => row.name || `${row.year || ''} ${row.semester || ''}`.trim() || row.id,
+      placeholder: 'Sem período específico',
+    },
+  ];
+  const selects = [];
+  fields.forEach((field, index) => {
+    const group = document.createElement('div');
+    group.className = 'form-group';
+    const label = document.createElement('label');
+    label.className = 'form-label';
+    label.textContent = field.label;
+    const select = document.createElement('select');
+    select.className = 'form-input';
+    select.required = index < 2;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = field.placeholder;
+    select.appendChild(placeholder);
+    field.rows.forEach(row => {
+      const option = document.createElement('option');
+      option.value = field.getValue(row);
+      option.textContent = field.getLabel(row);
+      select.appendChild(option);
+    });
+    label.appendChild(select);
+    group.appendChild(label);
+    form.appendChild(group);
+    selects.push(select);
+  });
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = 'btn btn-primary';
+  submit.textContent = 'Vincular disciplina';
+  form.appendChild(submit);
+  section.appendChild(form);
+
+  const tableContainer = document.createElement('div');
+  tableContainer.className = 'workspace-table-wrap';
+  section.appendChild(tableContainer);
+
+  const teacherById = new Map(teachers.map(teacher => [
+    teacher.id,
+    teacher.user?.full_name || teacher.user?.email || teacher.id,
+  ]));
+  const subjectById = new Map(subjects.map(subject => [subject.id, subject.name]));
+  const periodById = new Map(periods.map(period => [
+    period.id,
+    period.name || `${period.year || ''} ${period.semester || ''}`.trim() || period.id,
+  ]));
+
+  function renderAssociations() {
+    if (associations.length === 0) {
+      tableContainer.textContent = 'Nenhum vínculo cadastrado.';
+      return;
+    }
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const header = document.createElement('tr');
+    ['Professor', 'Disciplina', 'Período', 'Coordenação', 'Ações'].forEach(text => {
+      const cell = document.createElement('th');
+      cell.textContent = text;
+      header.appendChild(cell);
+    });
+    table.appendChild(header);
+    associations.forEach(association => {
+      const row = document.createElement('tr');
+      [
+        teacherById.get(association.teacher_id) || association.teacher_id,
+        subjectById.get(association.subject_id) || association.subject_id,
+        association.academic_period_id
+          ? periodById.get(association.academic_period_id) || association.academic_period_id
+          : 'Todos os períodos',
+        association.is_coordinator ? 'Sim' : 'Não',
+      ].forEach(text => {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.appendChild(cell);
+      });
+      const actions = document.createElement('td');
+      const coordinator = document.createElement('button');
+      coordinator.type = 'button';
+      coordinator.className = 'btn btn-secondary btn-sm';
+      coordinator.textContent = association.is_coordinator ? 'Remover coordenação' : 'Definir coordenação';
+      coordinator.addEventListener('click', async () => {
+        try {
+          await api.request(
+            `/academic/teacher-subjects/${encodeURIComponent(association.id)}?is_coordinator=${!association.is_coordinator}`,
+            { method: 'PATCH' },
+          );
+          await refreshAssociations();
+          showWorkspaceMessage('Vínculo atualizado.');
+        } catch (error) {
+          showWorkspaceMessage(error.message || 'Não foi possível atualizar o vínculo.', true);
+        }
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-danger btn-sm';
+      remove.textContent = 'Remover';
+      remove.addEventListener('click', async () => {
+        try {
+          await api.request(`/academic/teacher-subjects/${encodeURIComponent(association.id)}`, {
+            method: 'DELETE',
+          });
+          await refreshAssociations();
+          showWorkspaceMessage('Vínculo removido.');
+        } catch (error) {
+          showWorkspaceMessage(error.message || 'Não foi possível remover o vínculo.', true);
+        }
+      });
+      actions.append(coordinator, remove);
+      row.appendChild(actions);
+      body.appendChild(row);
+    });
+    table.appendChild(body);
+    tableContainer.replaceChildren(table);
+  }
+
+  async function refreshAssociations() {
+    const response = await api.request('/academic/teacher-subjects?page=1&page_size=100');
+    associations = normalizeRows(response);
+    renderAssociations();
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    submit.disabled = true;
+    try {
+      await api.request('/academic/teacher-subjects', {
+        method: 'POST',
+        body: {
+          teacher_id: selects[0].value,
+          subject_id: selects[1].value,
+          academic_period_id: selects[2].value || null,
+          is_coordinator: false,
+        },
+      });
+      form.reset();
+      await refreshAssociations();
+      showWorkspaceMessage('Disciplina vinculada ao professor.');
+    } catch (error) {
+      showWorkspaceMessage(error.message || 'Não foi possível vincular a disciplina.', true);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  renderAssociations();
+  container.appendChild(section);
+}
+
 async function loadWorkspaceScreen() {
   const screen = WORKSPACE_SCREENS[window.location.pathname];
   const title = document.getElementById('workspace-title');
@@ -1755,6 +2730,56 @@ async function loadWorkspaceScreen() {
     } catch (error) {
       content.replaceChildren();
       showWorkspaceMessage(error.message || 'Não foi possível carregar os chamados.', true);
+    }
+    return;
+  }
+
+  if (screen.classManagement) {
+    try {
+      await loadClassManagementScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar turmas e matrículas.', true);
+    }
+    return;
+  }
+
+  if (screen.gradeManagement) {
+    try {
+      await loadTeacherGradesScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar as notas.', true);
+    }
+    return;
+  }
+
+  if (screen.teacherStudents) {
+    try {
+      await loadTeacherStudentsScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar os alunos.', true);
+    }
+    return;
+  }
+
+  if (screen.subjectManagement) {
+    try {
+      await loadAcademicManagementScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar cursos e matérias.', true);
+    }
+    return;
+  }
+
+  if (screen.quality) {
+    try {
+      await loadQualityScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar os dados de qualidade.', true);
     }
     return;
   }
@@ -1820,9 +2845,567 @@ async function loadWorkspaceScreen() {
       }
       content.appendChild(sectionContent);
     }
+    if (screen.teacherSubjects) await loadTeacherSubjectAdmin(content);
   } catch (error) {
     content.replaceChildren();
     showWorkspaceMessage(error.message || 'Não foi possível carregar os dados desta tela.', true);
+  }
+}
+
+async function loadTeacherGradesScreen(container) {
+  const section = document.createElement('section');
+  section.className = 'workspace-grade-management';
+  section.innerHTML = `
+    <form class="workspace-form" id="teacher-grade-form">
+      <div class="form-group">
+        <label class="form-label" for="teacher-grade-class">Turma</label>
+        <select class="form-input" id="teacher-grade-class" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-grade-enrollment">Aluno matriculado</label>
+        <select class="form-input" id="teacher-grade-enrollment" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-grade-assessment">Avaliação</label>
+        <select class="form-input" id="teacher-grade-assessment" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-grade-score">Nota</label>
+        <input class="form-input" id="teacher-grade-score" type="number" min="0" step="0.01" required>
+      </div>
+      <div class="workspace-form-actions">
+        <button class="btn btn-primary" type="submit">Salvar nota</button>
+      </div>
+    </form>
+    <h2>Notas da turma</h2>
+    <div class="workspace-table-wrap">
+      <table>
+        <thead><tr><th>Aluno</th><th>Avaliação</th><th>Nota</th><th>Situação</th><th>Ações</th></tr></thead>
+        <tbody id="teacher-grades-body"></tbody>
+      </table>
+    </div>
+  `;
+  container.replaceChildren(section);
+
+  const classSelect = section.querySelector('#teacher-grade-class');
+  const enrollmentSelect = section.querySelector('#teacher-grade-enrollment');
+  const assessmentSelect = section.querySelector('#teacher-grade-assessment');
+  const scoreInput = section.querySelector('#teacher-grade-score');
+  const gradeForm = section.querySelector('#teacher-grade-form');
+  const gradeBody = section.querySelector('#teacher-grades-body');
+  let selectedClassData = null;
+  let isSaving = false;
+
+  const addOption = (select, label, value = '') => {
+    select.add(new Option(label, value));
+  };
+
+  const setStatus = (message, isError = false) => {
+    showWorkspaceMessage(message, isError);
+  };
+
+  const displayName = student => {
+    const name = student?.user?.full_name || student?.ra || 'Aluno';
+    const identifiers = [
+      student?.ra ? `RA ${student.ra}` : null,
+      student?.registration_number ? `Matrícula ${student.registration_number}` : null,
+    ].filter(Boolean);
+    return identifiers.length ? `${name} — ${identifiers.join(' · ')}` : name;
+  };
+
+  const setSelectOptions = (select, placeholder, options, labelFor) => {
+    select.replaceChildren();
+    addOption(select, placeholder);
+    options.forEach(item => addOption(select, labelFor(item), item.id));
+  };
+
+  const updateScoreLimit = () => {
+    const assessment = selectedClassData?.assessments.find(
+      item => item.id === assessmentSelect.value,
+    );
+    scoreInput.max = assessment?.max_score ?? '';
+  };
+
+  const loadClassData = async (classId, successMessage) => {
+    if (!classId) {
+      selectedClassData = null;
+      setSelectOptions(enrollmentSelect, 'Selecione um aluno...', [], () => '');
+      setSelectOptions(assessmentSelect, 'Selecione uma avaliação...', [], () => '');
+      gradeBody.replaceChildren();
+      setStatus('Selecione uma turma.');
+      return;
+    }
+
+    setStatus('Carregando matrículas, avaliações e notas...');
+    try {
+      const query = `class_id=${encodeURIComponent(classId)}&page=1&page_size=100`;
+      const [enrollmentResponse, studentResponse, assessmentResponse, gradeResponse] = await Promise.all([
+        api.request(`/academic/enrollments?${query}`),
+        api.request(`/students?${query}`),
+        api.request(`/academic/assessments?${query}`),
+        api.request(`/academic/grades?${query}`),
+      ]);
+      const enrollments = normalizeRows(enrollmentResponse).filter(item => item.status === 'active');
+      const students = new Map(
+        normalizeRows(studentResponse).map(student => [student.id, student]),
+      );
+      selectedClassData = {
+        enrollments,
+        students,
+        assessments: normalizeRows(assessmentResponse),
+        grades: normalizeRows(gradeResponse),
+      };
+
+      setSelectOptions(
+        enrollmentSelect,
+        'Selecione um aluno...',
+        enrollments,
+        enrollment => displayName(students.get(enrollment.student_id)),
+      );
+      setSelectOptions(
+        assessmentSelect,
+        'Selecione uma avaliação...',
+        selectedClassData.assessments,
+        assessment => assessment.title,
+      );
+      renderGrades();
+      updateScoreLimit();
+      setStatus(successMessage || `${selectedClassData.grades.length} nota(s) carregada(s).`);
+    } catch (error) {
+      selectedClassData = null;
+      gradeBody.replaceChildren();
+      setStatus(error.message || 'Não foi possível carregar os dados da turma.', true);
+    }
+  };
+
+  const renderGrades = () => {
+    gradeBody.replaceChildren();
+    if (!selectedClassData || selectedClassData.grades.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 5;
+      cell.textContent = 'Nenhuma nota cadastrada para esta turma.';
+      row.appendChild(cell);
+      gradeBody.appendChild(row);
+      return;
+    }
+
+    selectedClassData.grades.forEach(grade => {
+      const enrollment = selectedClassData.enrollments.find(
+        item => item.id === grade.enrollment_id,
+      );
+      const student = enrollment && selectedClassData.students.get(enrollment.student_id);
+      const assessment = selectedClassData.assessments.find(
+        item => item.id === grade.assessment_id,
+      );
+      const row = document.createElement('tr');
+      const values = [
+        displayName(student),
+        assessment?.title || 'Avaliação indisponível',
+      ];
+      values.forEach(value => {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.appendChild(cell);
+      });
+
+      const scoreCell = document.createElement('td');
+      const gradeInput = document.createElement('input');
+      gradeInput.type = 'number';
+      gradeInput.min = '0';
+      gradeInput.step = '0.01';
+      gradeInput.max = assessment?.max_score ?? '';
+      gradeInput.value = String(grade.score);
+      gradeInput.setAttribute('aria-label', `Nota de ${displayName(student)}`);
+      scoreCell.appendChild(gradeInput);
+      if (assessment?.max_score !== undefined) {
+        const maximum = document.createElement('span');
+        maximum.textContent = ` / ${assessment.max_score}`;
+        scoreCell.appendChild(maximum);
+      }
+      row.appendChild(scoreCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.textContent = grade.is_official ? 'Publicada' : 'Rascunho';
+      row.appendChild(statusCell);
+
+      const actionsCell = document.createElement('td');
+      const saveButton = document.createElement('button');
+      saveButton.className = 'btn btn-secondary btn-sm';
+      saveButton.type = 'button';
+      saveButton.textContent = 'Salvar';
+      saveButton.addEventListener('click', () => saveExistingGrade(grade, gradeInput, saveButton));
+      actionsCell.appendChild(saveButton);
+      if (!grade.is_official) {
+        const publishButton = document.createElement('button');
+        publishButton.className = 'btn btn-primary btn-sm';
+        publishButton.type = 'button';
+        publishButton.textContent = 'Publicar';
+        publishButton.addEventListener('click', () => publishGrade(grade.id, publishButton));
+        actionsCell.appendChild(publishButton);
+      }
+      row.appendChild(actionsCell);
+      gradeBody.appendChild(row);
+    });
+  };
+
+  const saveExistingGrade = async (grade, input, button) => {
+    const score = Number(input.value);
+    if (!Number.isFinite(score) || score < 0 || (input.max && score > Number(input.max))) {
+      setStatus('Informe uma nota válida dentro do limite da avaliação.', true);
+      input.focus();
+      return;
+    }
+    button.disabled = true;
+    try {
+      await api.request(`/academic/grades/${encodeURIComponent(grade.id)}`, {
+        method: 'PATCH',
+        body: { score },
+      });
+      await loadClassData(classSelect.value, 'Nota atualizada com sucesso.');
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível atualizar a nota.', true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  const publishGrade = async (gradeId, button) => {
+    button.disabled = true;
+    try {
+      await api.request(`/academic/grades/${encodeURIComponent(gradeId)}/publish`, {
+        method: 'POST',
+      });
+      await loadClassData(classSelect.value, 'Nota publicada com sucesso.');
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível publicar a nota.', true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  classSelect.addEventListener('change', () => loadClassData(classSelect.value));
+  assessmentSelect.addEventListener('change', updateScoreLimit);
+  gradeForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (isSaving) return;
+    const assessment = selectedClassData?.assessments.find(
+      item => item.id === assessmentSelect.value,
+    );
+    const score = Number(scoreInput.value);
+    if (!classSelect.value || !enrollmentSelect.value || !assessment || !Number.isFinite(score)) {
+      setStatus('Selecione turma, aluno e avaliação e informe uma nota válida.', true);
+      return;
+    }
+    if (score < 0 || score > Number(assessment.max_score)) {
+      setStatus(`A nota deve estar entre 0 e ${assessment.max_score}.`, true);
+      scoreInput.focus();
+      return;
+    }
+
+    isSaving = true;
+    const submitButton = gradeForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await api.request('/academic/grades', {
+        method: 'POST',
+        body: {
+          enrollment_id: enrollmentSelect.value,
+          assessment_id: assessment.id,
+          score,
+        },
+      });
+      const currentClassId = classSelect.value;
+      gradeForm.reset();
+      classSelect.value = currentClassId;
+      await loadClassData(currentClassId, 'Nota registrada com sucesso.');
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível registrar a nota.', true);
+    } finally {
+      isSaving = false;
+      submitButton.disabled = false;
+    }
+  });
+
+  setStatus('Carregando turmas autorizadas...');
+  try {
+    const response = await api.request('/academic/classes/my?page=1&page_size=100');
+    const classes = normalizeRows(response);
+    setSelectOptions(
+      classSelect,
+      'Selecione uma turma...',
+      classes,
+      classRecord => `${classRecord.code} — ${classRecord.name}`,
+    );
+    if (classes.length === 0) {
+      setStatus('Não há turmas ativas atribuídas a esta conta.');
+      setSelectOptions(enrollmentSelect, 'Selecione um aluno...', [], () => '');
+      setSelectOptions(assessmentSelect, 'Selecione uma avaliação...', [], () => '');
+      gradeBody.replaceChildren();
+      return;
+    }
+    await loadClassData(classes[0].id);
+    classSelect.value = classes[0].id;
+  } catch (error) {
+    setStatus(error.message || 'Não foi possível carregar as turmas autorizadas.', true);
+    throw error;
+  }
+}
+
+async function loadTeacherStudentsScreen(container) {
+  const section = document.createElement('section');
+  section.innerHTML = `
+    <h2>Cadastrar aluno em uma turma autorizada</h2>
+    <form class="workspace-form" id="teacher-create-student-form">
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-class">Turma</label>
+        <select class="form-input" id="teacher-new-student-class" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-name">Nome completo</label>
+        <input class="form-input" id="teacher-new-student-name" required minlength="2" maxlength="255">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-username">Login</label>
+        <input class="form-input" id="teacher-new-student-username" required minlength="3" maxlength="100" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-email">E-mail</label>
+        <input class="form-input" id="teacher-new-student-email" type="email" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-password">Senha inicial</label>
+        <input class="form-input" id="teacher-new-student-password" type="password" required minlength="8" maxlength="100" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-ra">RA</label>
+        <input class="form-input" id="teacher-new-student-ra" required maxlength="50">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-new-student-registration">Matrícula institucional</label>
+        <input class="form-input" id="teacher-new-student-registration" required maxlength="50">
+      </div>
+      <div class="workspace-form-actions">
+        <button class="btn btn-primary" type="submit">Cadastrar aluno</button>
+      </div>
+    </form>
+    <h2>Alunos matriculados</h2>
+    <div class="workspace-table-wrap">
+      <table>
+        <thead><tr><th>Nome</th><th>RA</th><th>Matrícula</th><th>E-mail</th><th>Situação</th><th>Ações</th></tr></thead>
+        <tbody id="teacher-students-body"></tbody>
+      </table>
+    </div>
+    <form class="workspace-form" id="teacher-edit-student-form" hidden>
+      <h2>Editar dados do aluno</h2>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-name">Nome completo</label>
+        <input class="form-input" id="teacher-edit-student-name" required minlength="2" maxlength="255">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-username">Login</label>
+        <input class="form-input" id="teacher-edit-student-username" required minlength="3" maxlength="100">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-email">E-mail</label>
+        <input class="form-input" id="teacher-edit-student-email" type="email" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-ra">RA</label>
+        <input class="form-input" id="teacher-edit-student-ra" required maxlength="50">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-registration">Matrícula institucional</label>
+        <input class="form-input" id="teacher-edit-student-registration" required maxlength="50">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="teacher-edit-student-status">Situação acadêmica</label>
+        <input class="form-input" id="teacher-edit-student-status" required maxlength="50">
+      </div>
+      <div class="workspace-form-actions">
+        <button class="btn btn-primary" type="submit">Salvar alterações</button>
+        <button class="btn btn-secondary" id="teacher-edit-student-cancel" type="button">Cancelar</button>
+      </div>
+    </form>
+  `;
+  container.replaceChildren(section);
+
+  const classSelect = section.querySelector('#teacher-new-student-class');
+  const createForm = section.querySelector('#teacher-create-student-form');
+  const editForm = section.querySelector('#teacher-edit-student-form');
+  const studentsBody = section.querySelector('#teacher-students-body');
+  const editFields = {
+    name: editForm.querySelector('#teacher-edit-student-name'),
+    username: editForm.querySelector('#teacher-edit-student-username'),
+    email: editForm.querySelector('#teacher-edit-student-email'),
+    ra: editForm.querySelector('#teacher-edit-student-ra'),
+    registration: editForm.querySelector('#teacher-edit-student-registration'),
+    status: editForm.querySelector('#teacher-edit-student-status'),
+  };
+  let students = [];
+  let selectedStudent = null;
+  let isSaving = false;
+
+  const setStatus = (message, isError = false) => showWorkspaceMessage(message, isError);
+  const selectedClassId = () => classSelect.value;
+
+  const loadStudents = async successMessage => {
+    const classId = selectedClassId();
+    if (!classId) {
+      studentsBody.replaceChildren();
+      setStatus('Selecione uma turma.');
+      return;
+    }
+    studentsBody.textContent = 'Carregando alunos...';
+    try {
+      const response = await api.request(
+        `/students?class_id=${encodeURIComponent(classId)}&page=1&page_size=100`,
+      );
+      students = normalizeRows(response);
+      studentsBody.replaceChildren();
+      if (students.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.textContent = 'Nenhum aluno matriculado nesta turma.';
+        row.appendChild(cell);
+        studentsBody.appendChild(row);
+      }
+      students.forEach(student => {
+        const row = document.createElement('tr');
+        [
+          student.user?.full_name || '—',
+          student.ra || '—',
+          student.registration_number || '—',
+          student.user?.email || '—',
+          student.status || '—',
+        ].forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        const actions = document.createElement('td');
+        const editButton = document.createElement('button');
+        editButton.className = 'btn btn-secondary btn-sm';
+        editButton.type = 'button';
+        editButton.textContent = 'Editar';
+        editButton.addEventListener('click', () => openEditForm(student));
+        actions.appendChild(editButton);
+        row.appendChild(actions);
+        studentsBody.appendChild(row);
+      });
+      setStatus(successMessage || `${students.length} aluno(s) carregado(s).`);
+    } catch (error) {
+      students = [];
+      studentsBody.replaceChildren();
+      setStatus(error.message || 'Não foi possível carregar os alunos desta turma.', true);
+    }
+  };
+
+  const openEditForm = student => {
+    selectedStudent = student;
+    editFields.name.value = student.user?.full_name || '';
+    editFields.username.value = student.user?.username || '';
+    editFields.email.value = student.user?.email || '';
+    editFields.ra.value = student.ra || '';
+    editFields.registration.value = student.registration_number || '';
+    editFields.status.value = student.status || 'active';
+    editForm.hidden = false;
+    editForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  classSelect.addEventListener('change', () => {
+    editForm.hidden = true;
+    selectedStudent = null;
+    loadStudents();
+  });
+  createForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (isSaving) return;
+    const submitButton = createForm.querySelector('button[type="submit"]');
+    isSaving = true;
+    submitButton.disabled = true;
+    try {
+      await api.create('/users/provision', {
+        user: {
+          full_name: section.querySelector('#teacher-new-student-name').value.trim(),
+          username: section.querySelector('#teacher-new-student-username').value.trim(),
+          email: section.querySelector('#teacher-new-student-email').value.trim(),
+          password: section.querySelector('#teacher-new-student-password').value,
+          role: 'student',
+        },
+        student_ra: section.querySelector('#teacher-new-student-ra').value.trim(),
+        student_registration_number: section.querySelector(
+          '#teacher-new-student-registration',
+        ).value.trim(),
+        student_class_id: selectedClassId(),
+      });
+      const currentClassId = selectedClassId();
+      createForm.reset();
+      classSelect.value = currentClassId;
+      await loadStudents('Aluno cadastrado e vinculado à turma.');
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível cadastrar o aluno.', true);
+    } finally {
+      isSaving = false;
+      submitButton.disabled = false;
+    }
+  });
+  editForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!selectedStudent || isSaving) return;
+    const submitButton = editForm.querySelector('button[type="submit"]');
+    isSaving = true;
+    submitButton.disabled = true;
+    try {
+      await api.request(`/users/${encodeURIComponent(selectedStudent.user_id)}/academic-profile`, {
+        method: 'PATCH',
+        body: {
+          user: {
+            full_name: editFields.name.value.trim(),
+            username: editFields.username.value.trim(),
+            email: editFields.email.value.trim(),
+          },
+          student: {
+            ra: editFields.ra.value.trim(),
+            registration_number: editFields.registration.value.trim(),
+            status: editFields.status.value.trim(),
+          },
+        },
+      });
+      editForm.hidden = true;
+      selectedStudent = null;
+      await loadStudents('Dados do aluno atualizados com sucesso.');
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível atualizar o aluno.', true);
+    } finally {
+      isSaving = false;
+      submitButton.disabled = false;
+    }
+  });
+  editForm.querySelector('#teacher-edit-student-cancel').addEventListener('click', () => {
+    selectedStudent = null;
+    editForm.hidden = true;
+  });
+
+  setStatus('Carregando turmas autorizadas...');
+  try {
+    const response = await api.request('/academic/classes/my?page=1&page_size=100');
+    const classes = normalizeRows(response);
+    classSelect.replaceChildren(new Option('Selecione uma turma...', ''));
+    classes.forEach(classRecord => {
+      classSelect.add(new Option(`${classRecord.code} — ${classRecord.name}`, classRecord.id));
+    });
+    if (classes.length === 0) {
+      setStatus('Não há turmas ativas atribuídas a esta conta.');
+      createForm.hidden = true;
+      return;
+    }
+    classSelect.value = classes[0].id;
+    await loadStudents();
+  } catch (error) {
+    setStatus(error.message || 'Não foi possível carregar as turmas autorizadas.', true);
+    throw error;
   }
 }
 

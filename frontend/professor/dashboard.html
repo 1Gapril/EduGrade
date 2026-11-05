@@ -150,6 +150,10 @@
             <span data-feather="users"></span>
             <span class="nav-item-text">Minhas Turmas</span>
           </a>
+          <a href="/professor/students.html" class="nav-item" data-href="/professor/students.html">
+            <span data-feather="user"></span>
+            <span class="nav-item-text">Alunos</span>
+          </a>
           <a href="/professor/exams.html" class="nav-item" data-href="/professor/exams.html">
             <span data-feather="file-text"></span>
             <span class="nav-item-text">Minhas Provas</span>
@@ -426,10 +430,9 @@
       const container = document.getElementById('my-classes-list');
       container.textContent = 'Carregando turmas...';
       try {
-        // O endpoint /exams agora filtra por professor automaticamente
-        // Usamos /academic/classes para obter as turmas do professor
-        const response = await api.request('/academic/classes?page=1&page_size=100');
-        const classes = normalizeRows(response);
+        // O endpoint /academic/classes/my retorna apenas as turmas do professor
+        const response = await api.request('/academic/classes/my?page=1&page_size=100');
+        const classes = Array.isArray(response) ? response : (response?.items || []);
         if (!classes.length) {
           container.textContent = 'Você não possui turmas atribuídas.';
           document.getElementById('teacher-classes').textContent = '0';
@@ -440,25 +443,53 @@
         classes.forEach(cls => {
           const card = document.createElement('div');
           card.className = 'class-card';
-          card.innerHTML = `
-            <div class="class-card-header">
-              <div>
-                <div class="class-card-title">${cls.name}</div>
-                <div class="class-card-subject">${cls.subject?.name || 'Disciplina não informada'}</div>
-              </div>
-              <span class="badge badge-success">${cls.code}</span>
-            </div>
-            <div class="class-card-body">
-              <div class="class-card-meta">
-                <span><span data-feather="users"></span> ${cls.enrollments?.length || 0} alunos</span>
-                <span><span data-feather="calendar"></span> ${cls.year}/${cls.semester}º semestre</span>
-              </div>
-              <div class="class-card-actions">
-                <a href="/professor/class-detail.html?id=${cls.id}" class="btn btn-secondary btn-sm">Ver detalhes</a>
-                <a href="/exams/create.html" class="btn btn-primary btn-sm" data-class-id="${cls.id}">Criar prova</a>
-              </div>
-            </div>
-          `;
+
+          const header = document.createElement('div');
+          header.className = 'class-card-header';
+          const headerText = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'class-card-title';
+          title.textContent = cls.name || 'Turma sem nome';
+          const subject = document.createElement('div');
+          subject.className = 'class-card-subject';
+          subject.textContent = cls.subject?.name || 'Disciplina não informada';
+          headerText.append(title, subject);
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-success';
+          badge.textContent = cls.code || '';
+          header.append(headerText, badge);
+
+          const body = document.createElement('div');
+          body.className = 'class-card-body';
+          const meta = document.createElement('div');
+          meta.className = 'class-card-meta';
+          const students = document.createElement('span');
+          const studentsIcon = document.createElement('span');
+          studentsIcon.dataset.feather = 'users';
+          students.append(
+            studentsIcon,
+            ` ${cls.enrollments_count ?? cls.enrollments?.length ?? 0} alunos`,
+          );
+          const period = document.createElement('span');
+          const periodIcon = document.createElement('span');
+          periodIcon.dataset.feather = 'calendar';
+          period.append(periodIcon, ` ${cls.year || '—'}/${cls.semester || '—'}º semestre`);
+          meta.append(students, period);
+
+          const actions = document.createElement('div');
+          actions.className = 'class-card-actions';
+          const detailsLink = document.createElement('a');
+          detailsLink.href = `/professor/class-detail.html?id=${encodeURIComponent(cls.id)}`;
+          detailsLink.className = 'btn btn-secondary btn-sm';
+          detailsLink.textContent = 'Ver detalhes';
+          const createLink = document.createElement('a');
+          createLink.href = `/exams/create.html?class_id=${encodeURIComponent(cls.id)}`;
+          createLink.className = 'btn btn-primary btn-sm';
+          createLink.textContent = 'Criar prova';
+          actions.append(detailsLink, createLink);
+
+          body.append(meta, actions);
+          card.append(header, body);
           container.appendChild(card);
         });
         feather.replace();
@@ -474,7 +505,7 @@
       try {
         // O endpoint /exams agora filtra por professor automaticamente
         const response = await api.request('/exams?page=1&page_size=10');
-        const exams = normalizeRows(response);
+        const exams = Array.isArray(response) ? response : (response?.items || []);
         if (!exams.length) {
           container.textContent = 'Você ainda não criou provas.';
           return;

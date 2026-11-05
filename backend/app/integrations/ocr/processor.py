@@ -1,13 +1,10 @@
 """Processador de OCR para digitalização de provas."""
 
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-from uuid import UUID
+from typing import Any
+
 import cv2
 import numpy as np
-from PIL import Image
 import pytesseract
-import json
 
 from backend.app.core.config import settings
 from backend.app.core.exceptions import ExternalServiceError
@@ -18,7 +15,7 @@ class OCRProcessor:
 
     def __init__(
         self,
-        tesseract_path: Optional[str] = None,
+        tesseract_path: str | None = None,
         language: str = "por",
         dpi: int = 300,
     ):
@@ -27,7 +24,7 @@ class OCRProcessor:
         self.dpi = dpi
         pytesseract.pytesseract.tesseract_cmd = self.tesseract_path
 
-    def process_page(self, image_path: str) -> Dict[str, Any]:
+    def process_page(self, image_path: str) -> dict[str, Any]:
         """
         Processa uma página de prova.
 
@@ -44,8 +41,6 @@ class OCRProcessor:
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Não foi possível carregar imagem: {image_path}")
-
-        original = image.copy()
 
         # 1. Correção de rotação
         rotation = self._detect_rotation(image)
@@ -168,7 +163,7 @@ class OCRProcessor:
 
         return morph
 
-    def _run_ocr(self, image: np.ndarray) -> Dict[str, Any]:
+    def _run_ocr(self, image: np.ndarray) -> dict[str, Any]:
         """Executa OCR na imagem."""
         try:
             # Dados detalhados
@@ -215,8 +210,8 @@ class OCRProcessor:
     def _extract_answers_by_layout(
         self,
         image: np.ndarray,
-        ocr_data: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        ocr_data: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Extrai respostas baseado no layout da prova.
         Versão simplificada - em produção usar detecção de questões por coordenadas.
@@ -245,7 +240,7 @@ class OCRProcessor:
 
         # Converte para lista de respostas extraídas
         extracted = []
-        for line_y, words in sorted(lines.items()):
+        for _, words in sorted(lines.items()):
             line_text = ' '.join(w['text'] for w in words)
             avg_conf = sum(w['conf'] for w in words if w['conf'] > 0) / max(1, len([w for w in words if w['conf'] > 0]))
 
@@ -283,8 +278,8 @@ class OCRProcessor:
     def extract_question_regions(
         self,
         image_path: str,
-        question_areas: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        question_areas: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Extrai regiões específicas de questões.
 
@@ -339,11 +334,13 @@ class PaddleOCRProcessor:
             try:
                 from paddleocr import PaddleOCR
                 self._ocr = PaddleOCR(use_angle_cls=True, lang=self.lang, use_gpu=self.use_gpu)
-            except ImportError:
-                raise RuntimeError("PaddleOCR não instalado. Instale com: pip install paddleocr")
+            except ImportError as error:
+                raise RuntimeError(
+                    "PaddleOCR não instalado. Instale com: pip install paddleocr"
+                ) from error
         return self._ocr
 
-    def process(self, image_path: str) -> List[Dict[str, Any]]:
+    def process(self, image_path: str) -> list[dict[str, Any]]:
         """Processa imagem com PaddleOCR."""
         ocr = self._get_ocr()
         result = ocr.ocr(image_path, cls=True)

@@ -1,42 +1,42 @@
 """Repositories package initialization."""
 
-from backend.app.repositories.base import BaseRepository
-from backend.app.repositories.user_repository import (
-    UserRepository,
-    StudentRepository,
-    TeacherRepository,
-    AdministratorRepository,
-)
 from backend.app.repositories.academic_repository import (
-    CourseRepository,
-    SubjectRepository,
-    ClassRepository,
     AcademicPeriodRepository,
-    EnrollmentRepository,
-    TeacherSubjectRepository,
-    AssessmentRepository,
-    GradeRepository,
-    AttendanceRepository,
     AcademicRuleRepository,
-)
-from backend.app.repositories.exam_repository import (
-    ExamRepository,
-    ExamVersionRepository,
-    ExamQuestionRepository,
-    AnswerKeyRepository,
-    GradingRubricRepository,
-    ExamCopyRepository,
-    ExamPrintLogRepository,
-    ExamSubmissionRepository,
-    SubmissionPageRepository,
-    ExtractedAnswerRepository,
+    AssessmentRepository,
+    AttendanceRepository,
+    ClassRepository,
+    CourseRepository,
+    EnrollmentRepository,
+    GradeRepository,
+    SubjectRepository,
+    TeacherSubjectRepository,
 )
 from backend.app.repositories.ai_correction_repository import (
     AICorrectionRepository,
-    CorrectionReviewRepository,
-    CorrectionAuditLogRepository,
     AuditLogRepository,
+    CorrectionAuditLogRepository,
+    CorrectionReviewRepository,
     SystemLogRepository,
+)
+from backend.app.repositories.base import BaseRepository
+from backend.app.repositories.exam_repository import (
+    AnswerKeyRepository,
+    ExamCopyRepository,
+    ExamPrintLogRepository,
+    ExamQuestionRepository,
+    ExamRepository,
+    ExamSubmissionRepository,
+    ExamVersionRepository,
+    ExtractedAnswerRepository,
+    GradingRubricRepository,
+    SubmissionPageRepository,
+)
+from backend.app.repositories.user_repository import (
+    AdministratorRepository,
+    StudentRepository,
+    TeacherRepository,
+    UserRepository,
 )
 
 __all__ = [

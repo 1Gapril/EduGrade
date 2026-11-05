@@ -1,11 +1,10 @@
 """Schemas comuns: Paginação, Filtros, Respostas padronizadas."""
 
-from typing import Generic, TypeVar, Optional, List, Any
-from uuid import UUID
 from datetime import datetime
+from typing import Any, Generic, TypeVar
+from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
@@ -30,7 +29,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     """Resposta paginada genérica."""
     model_config = ConfigDict(from_attributes=True)
 
-    items: List[T]
+    items: list[T]
     total: int
     page: int
     page_size: int
@@ -40,7 +39,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 def paginate(
-    items: List[T],
+    items: list[T],
     total: int,
     params: PaginationParams,
 ) -> PaginatedResponse[T]:
@@ -61,15 +60,15 @@ def paginate(
 
 class FilterParams(BaseModel):
     """Parâmetros base de filtro."""
-    search: Optional[str] = None
-    order_by: Optional[str] = None
+    search: str | None = None
+    order_by: str | None = None
     order_desc: bool = False
 
 
 class DateRangeFilter(BaseModel):
     """Filtro por intervalo de datas."""
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
 
 
 # ==================== Standard Responses ====================
@@ -77,15 +76,15 @@ class DateRangeFilter(BaseModel):
 class MessageResponse(BaseModel):
     """Resposta simples de mensagem."""
     message: str
-    detail: Optional[str] = None
+    detail: str | None = None
 
 
 class ErrorResponse(BaseModel):
     """Resposta de erro padronizada."""
     error: str
     message: str
-    detail: Optional[str] = None
-    code: Optional[str] = None
+    detail: str | None = None
+    code: str | None = None
 
 
 class ValidationErrorDetail(BaseModel):
@@ -97,14 +96,14 @@ class ValidationErrorDetail(BaseModel):
 
 class ValidationErrorResponse(ErrorResponse):
     """Resposta de erro de validação."""
-    errors: List[ValidationErrorDetail]
+    errors: list[ValidationErrorDetail]
 
 
 class SuccessResponse(BaseModel, Generic[T]):
     """Resposta de sucesso com dados."""
     success: bool = True
     data: T
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class CreatedResponse(BaseModel, Generic[T]):
@@ -132,15 +131,15 @@ class IDResponse(BaseModel):
 
 class BulkOperationRequest(BaseModel, Generic[T]):
     """Requisição de operação em lote."""
-    items: List[T]
+    items: list[T]
 
 
 class BulkOperationResult(BaseModel):
     """Resultado de operação em lote."""
     success_count: int
     failure_count: int
-    errors: List[dict] = Field(default_factory=list)
-    successful_ids: List[UUID] = Field(default_factory=list)
+    errors: list[dict] = Field(default_factory=list)
+    successful_ids: list[UUID] = Field(default_factory=list)
 
 
 # ==================== Health Check ====================
@@ -158,8 +157,8 @@ class ServiceStatus(BaseModel):
     """Status de um serviço."""
     name: str
     status: str  # healthy, degraded, unhealthy
-    latency_ms: Optional[int] = None
-    error: Optional[str] = None
+    latency_ms: int | None = None
+    error: str | None = None
 
 
 # ==================== File Upload ====================
@@ -170,7 +169,7 @@ class FileUploadResponse(BaseModel):
     content_type: str
     size: int
     path: str
-    url: Optional[str] = None
+    url: str | None = None
 
 
 class FileUploadRequest(BaseModel):
@@ -185,19 +184,19 @@ class FileUploadRequest(BaseModel):
 class ExportRequest(BaseModel):
     """Requisição de exportação."""
     format: str = Field(default="json", pattern="^(json|csv|xlsx|pdf)$")
-    filters: Optional[dict] = None
-    fields: Optional[List[str]] = None
+    filters: dict | None = None
+    fields: list[str] | None = None
 
 
 class ImportRequest(BaseModel):
     """Requisição de importação."""
     file_path: str
     format: str = Field(default="json", pattern="^(json|csv|xlsx)$")
-    options: Optional[dict] = None
+    options: dict | None = None
 
 
 class ImportResult(BaseModel):
     """Resultado de importação."""
     imported: int
     failed: int
-    errors: List[dict] = Field(default_factory=list)
+    errors: list[dict] = Field(default_factory=list)

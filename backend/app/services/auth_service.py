@@ -1,23 +1,26 @@
 """Service de Autenticação e Autorização."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.app.core.exceptions import AuthenticationError, ValidationError
 from backend.app.core.security import (
-    verify_password,
-    get_password_hash,
+    TokenPayload,
     create_access_token,
     create_refresh_token,
     decode_token,
-    TokenPayload,
+    get_password_hash,
+    verify_password,
 )
 from backend.app.models.user import User, UserRole
-from backend.app.repositories.user_repository import UserRepository
+from backend.app.repositories.user_repository import (
+    StudentRepository,
+    TeacherRepository,
+    UserRepository,
+)
 from backend.app.schemas.user import LoginRequest, TokenResponse, UserResponse
-from backend.app.core.exceptions import AuthenticationError, ValidationError
 
 
 class AuthService:
@@ -50,7 +53,7 @@ class AuthService:
             raise AuthenticationError("Credenciais inválidas")
 
         # Update last login
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.now(UTC)
         self.db.flush()
 
         # Log successful login
@@ -71,8 +74,8 @@ class AuthService:
             payload = decode_token(refresh_token)
             if payload.type != "refresh":
                 raise AuthenticationError("Token inválido")
-        except Exception:
-            raise AuthenticationError("Refresh token inválido ou expirado")
+        except Exception as error:
+            raise AuthenticationError("Refresh token inválido ou expirado") from error
 
         user = self.user_repo.get(UUID(payload.user_id))
         if not user or not user.is_active:
@@ -135,6 +138,8 @@ class PermissionService:
     def __init__(self, db: Session):
         self.db = db
         self.user_repo = UserRepository(db)
+        self.teacher_repo = TeacherRepository(db)
+        self.student_repo = StudentRepository(db)
 
     def can_access_class(self, user: User, class_id: UUID) -> bool:
         """Verifica se usuário pode acessar turma."""
@@ -142,7 +147,7 @@ class PermissionService:
             return True
 
         if user.role == UserRole.TEACHER:
-            teacher = self.user_repo.get_teacher_profile(user.id)
+            teacher = self.teacher_repo.get_by_user_id(user.id)
             if teacher:
                 from backend.app.repositories.academic_repository import ClassRepository
                 class_repo = ClassRepository(self.db)
@@ -150,7 +155,7 @@ class PermissionService:
                 return class_obj and class_obj.teacher_id == teacher.id
 
         if user.role == UserRole.STUDENT:
-            student = self.user_repo.get_student_profile(user.id)
+            student = self.student_repo.get_by_user_id(user.id)
             if student:
                 from backend.app.repositories.academic_repository import EnrollmentRepository
                 enrollment_repo = EnrollmentRepository(self.db)
@@ -165,7 +170,7 @@ class PermissionService:
             return True
 
         if user.role == UserRole.TEACHER:
-            teacher = self.user_repo.get_teacher_profile(user.id)
+            teacher = self.teacher_repo.get_by_user_id(user.id)
             if teacher:
                 from backend.app.repositories.exam_repository import ExamRepository
                 exam_repo = ExamRepository(self.db)
@@ -184,9 +189,12 @@ class PermissionService:
             return True
 
         if user.role == UserRole.TEACHER:
-            teacher = self.user_repo.get_teacher_profile(user.id)
+            teacher = self.teacher_repo.get_by_user_id(user.id)
             if teacher:
-                from backend.app.repositories.exam_repository import ExamSubmissionRepository, ExamRepository
+                from backend.app.repositories.exam_repository import (
+                    ExamRepository,
+                    ExamSubmissionRepository,
+                )
                 submission_repo = ExamSubmissionRepository(self.db)
                 submission = submission_repo.get(submission_id)
                 if submission:

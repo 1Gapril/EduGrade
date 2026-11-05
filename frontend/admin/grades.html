@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notas e Publicações - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+</head>
+<body>
+  <main class="container" style="max-width: 1200px; padding: 2rem 1rem;">
+    <header style="margin-bottom:1.5rem">
+      <p><a href="/admin/dashboard.html">← Painel administrativo</a></p>
+      <h1>Notas e Publicações</h1>
+      <p>Cadastre notas e publique-as para disponibilizá-las ao aluno.</p>
+    </header>
+    <p id="page-message" role="status" aria-live="polite"></p>
+    <section class="card" style="padding:1.25rem;margin-bottom:1.5rem">
+      <h2>Registrar nota</h2>
+      <form id="grade-form" class="form-grid">
+        <label>Turma<select id="class-id" required></select></label>
+        <label>Matrícula do aluno<select id="enrollment-id" required></select></label>
+        <label>Avaliação<select id="assessment-id" required></select></label>
+        <label>Nota<input id="score" type="number" min="0" step="0.01" required></label>
+        <button class="btn btn-primary" type="submit">Salvar nota</button>
+      </form>
+    </section>
+    <section>
+      <h2>Notas registradas</h2>
+      <div class="table-responsive">
+        <table class="table">
+          <thead><tr><th>Aluno</th><th>Turma</th><th>Avaliação</th><th>Nota</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="grades-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="../js/main.js"></script>
+  <script>
+    let classes = [];
+    let enrollments = [];
+    let assessments = [];
+    let grades = [];
+    let students = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      State.init();
+      if (!await Auth.init()) { window.location.replace('/login.html'); return; }
+      if (!Auth.requireRole('admin')) return;
+      document.getElementById('class-id').addEventListener('change', updateContextOptions);
+      document.getElementById('assessment-id').addEventListener('change', updateScoreLimit);
+      document.getElementById('grade-form').addEventListener('submit', createGrade);
+      await loadPage();
+    });
+
+    function setMessage(message, isError = false) {
+      const element = document.getElementById('page-message');
+      element.textContent = message;
+      element.className = isError ? 'text-danger' : 'text-success';
+    }
+
+    function items(response) {
+      return Array.isArray(response) ? response : (response.items || []);
+    }
+
+    async function loadPage() {
+      setMessage('Carregando dados acadêmicos...');
+      try {
+        const [classResult, enrollmentResult, assessmentResult, gradeResult, studentResult] = await Promise.all([
+          api.request('/academic/classes?page=1&page_size=100'),
+          api.request('/academic/enrollments?page=1&page_size=100'),
+          api.request('/academic/assessments?page=1&page_size=100'),
+          api.request('/academic/grades?page=1&page_size=100'),
+          api.request('/students?page=1&page_size=100')
+        ]);
+        classes = items(classResult);
+        enrollments = items(enrollmentResult);
+        assessments = items(assessmentResult);
+        grades = items(gradeResult);
+        students = items(studentResult);
+        const classSelect = document.getElementById('class-id');
+        classSelect.replaceChildren(new Option('Selecione uma turma...', ''));
+        classes.forEach(item => classSelect.add(new Option(`${item.code} — ${item.name}`, item.id)));
+        updateContextOptions();
+        renderGrades();
+        setMessage(`${grades.length} nota(s) carregada(s).`);
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível carregar as notas.', true);
+      }
+    }
+
+    function updateContextOptions() {
+      const classId = document.getElementById('class-id').value;
+      const enrollmentSelect = document.getElementById('enrollment-id');
+      const assessmentSelect = document.getElementById('assessment-id');
+      enrollmentSelect.replaceChildren(new Option('Selecione um aluno...', ''));
+      assessmentSelect.replaceChildren(new Option('Selecione uma avaliação...', ''));
+      enrollments.filter(item => item.class_id === classId).forEach(item => {
+        const student = students.find(candidate => candidate.id === item.student_id);
+        const label = student?.user?.full_name || student?.ra || `Aluno ${student?.id || item.student_id}`;
+        enrollmentSelect.add(new Option(`${label} — RA ${student?.ra || '—'}`, item.id));
+      });
+      assessments.filter(item => item.class_id === classId).forEach(item => {
+        assessmentSelect.add(new Option(item.title, item.id));
+      });
+      updateScoreLimit();
+    }
+
+    function updateScoreLimit() {
+      const assessment = assessments.find(item => item.id === document.getElementById('assessment-id').value);
+      document.getElementById('score').max = assessment?.max_score || '';
+    }
+
+    function renderGrades() {
+      const body = document.getElementById('grades-body');
+      body.replaceChildren();
+      grades.forEach(grade => {
+        const enrollment = enrollments.find(item => item.id === grade.enrollment_id);
+        const student = students.find(item => item.id === enrollment?.student_id);
+        const assessment = assessments.find(item => item.id === grade.assessment_id);
+        const row = document.createElement('tr');
+        const details = [
+          student?.user?.full_name || student?.ra || `Aluno ${grade.enrollment_id}`,
+          enrollment?.class_?.name || '—',
+          assessment?.title || `Avaliação ${grade.assessment_id}`
+        ];
+        details.forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        const scoreCell = document.createElement('td');
+        const scoreInput = document.createElement('input');
+        scoreInput.type = 'number';
+        scoreInput.min = '0';
+        scoreInput.step = '0.01';
+        scoreInput.max = assessment?.max_score || '';
+        scoreInput.value = grade.score;
+        scoreInput.setAttribute('aria-label', `Nota da avaliação ${assessment?.title || ''}`);
+        scoreCell.append(scoreInput);
+        const maxScore = document.createElement('span');
+        maxScore.textContent = ` / ${assessment?.max_score || '—'}`;
+        scoreCell.append(maxScore);
+        row.append(scoreCell);
+        const statusCell = document.createElement('td');
+        statusCell.textContent = grade.is_official ? 'Publicada' : 'Rascunho';
+        row.append(statusCell);
+        const actionCell = document.createElement('td');
+        const save = document.createElement('button');
+        save.className = 'btn btn-ghost btn-sm';
+        save.type = 'button';
+        save.textContent = 'Salvar nota';
+        save.addEventListener('click', () => updateGrade(grade.id, Number(scoreInput.value)));
+        actionCell.append(save);
+        if (!grade.is_official) {
+          const publish = document.createElement('button');
+          publish.className = 'btn btn-primary btn-sm';
+          publish.type = 'button';
+          publish.textContent = 'Publicar';
+          publish.addEventListener('click', () => publishGrade(grade.id));
+          actionCell.append(publish);
+        }
+        row.append(actionCell);
+        body.append(row);
+      });
+    }
+
+    async function createGrade(event) {
+      event.preventDefault();
+      const payload = {
+        enrollment_id: document.getElementById('enrollment-id').value,
+        assessment_id: document.getElementById('assessment-id').value,
+        score: Number(document.getElementById('score').value)
+      };
+      try {
+        await api.request('/academic/grades', { method: 'POST', body: payload });
+        document.getElementById('grade-form').reset();
+        updateContextOptions();
+        await loadPage();
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível salvar a nota.', true);
+      }
+    }
+
+    async function publishGrade(gradeId) {
+      try {
+        await api.request(`/academic/grades/${gradeId}/publish`, { method: 'POST' });
+        await loadPage();
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível publicar a nota.', true);
+      }
+    }
+
+    async function updateGrade(gradeId, score) {
+      try {
+        await api.request(`/academic/grades/${gradeId}`, { method: 'PATCH', body: { score } });
+        await loadPage();
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível atualizar a nota.', true);
+      }
+    }
+  </script>
+</body>
+</html>

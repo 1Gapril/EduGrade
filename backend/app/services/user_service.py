@@ -1,24 +1,30 @@
 """Service de Usuários."""
 
-from typing import Optional, List
+from datetime import UTC, datetime
 from uuid import UUID
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from backend.app.models.user import User, UserRole, Student, Teacher, Administrator
+from backend.app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from backend.app.core.security import get_password_hash
+from backend.app.models.user import Administrator, Student, Teacher, User, UserRole
+from backend.app.repositories.ai_correction_repository import AuditActionType, AuditLogRepository
 from backend.app.repositories.user_repository import (
-    UserRepository, StudentRepository, TeacherRepository, AdministratorRepository
+    AdministratorRepository,
+    StudentRepository,
+    TeacherRepository,
+    UserRepository,
 )
 from backend.app.schemas.user import (
-    UserCreate, UserUpdate, UserUpdatePassword,
-    StudentCreate, StudentUpdate,
-    TeacherCreate, TeacherUpdate,
-    AdministratorCreate, AdministratorUpdate,
+    AdministratorCreate,
+    AdministratorUpdate,
+    StudentCreate,
+    StudentUpdate,
+    TeacherCreate,
+    TeacherUpdate,
+    UserCreate,
+    UserUpdate,
 )
-from backend.app.core.security import get_password_hash
-from backend.app.core.exceptions import ValidationError, NotFoundError, ConflictError
-from backend.app.repositories.ai_correction_repository import AuditLogRepository, AuditActionType
 
 
 class UserService:
@@ -78,19 +84,25 @@ class UserService:
         }
 
         # Check email/username conflicts
-        if user_data.email and user_data.email != user.email:
-            if self.user_repo.get_by_email(user_data.email):
-                raise ConflictError("Email já cadastrado")
-        if user_data.username and user_data.username != user.username:
-            if self.user_repo.get_by_username(user_data.username):
-                raise ConflictError("Username já cadastrado")
+        if (
+            user_data.email
+            and user_data.email != user.email
+            and self.user_repo.get_by_email(user_data.email)
+        ):
+            raise ConflictError("Email já cadastrado")
+        if (
+            user_data.username
+            and user_data.username != user.username
+            and self.user_repo.get_by_username(user_data.username)
+        ):
+            raise ConflictError("Username já cadastrado")
 
         update_data = user_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             if hasattr(user, key):
                 setattr(user, key, value)
 
-        user.updated_at = datetime.now(timezone.utc)
+        user.updated_at = datetime.now(UTC)
         self.db.flush()
 
         new_values = {
@@ -130,11 +142,11 @@ class UserService:
 
     def list_users(
         self,
-        role: Optional[UserRole] = None,
+        role: UserRole | None = None,
         active_only: bool = True,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[User]:
+    ) -> list[User]:
         """Lista usuários."""
         return self.user_repo.get_all(
             skip=skip,
@@ -142,7 +154,7 @@ class UserService:
             filters={"role": role, "is_active": True} if active_only else {"role": role} if role else None,
         )
 
-    def search_users(self, query: str, role: Optional[UserRole] = None) -> List[User]:
+    def search_users(self, query: str, role: UserRole | None = None) -> list[User]:
         """Busca usuários."""
         return self.user_repo.search(query, role)
 
@@ -166,6 +178,9 @@ class StudentService:
 
         if self.student_repo.get_by_ra(student_data.ra):
             raise ConflictError("RA já cadastrado")
+        registration_number = getattr(student_data, "registration_number", None)
+        if registration_number and self.student_repo.get_by_registration_number(registration_number):
+            raise ConflictError("Matrícula institucional já cadastrada")
         if self.student_repo.get_by_user_id(student_data.user_id):
             raise ConflictError("Usuário já possui perfil de aluno")
 
@@ -190,7 +205,7 @@ class StudentService:
             raise NotFoundError("Aluno não encontrado")
         return student
 
-    def get_student_by_user(self, user_id: UUID) -> Optional[Student]:
+    def get_student_by_user(self, user_id: UUID) -> Student | None:
         """Busca aluno por user_id."""
         return self.student_repo.get_by_user_id(user_id)
 
@@ -200,17 +215,28 @@ class StudentService:
 
         old_values = {
             "ra": student.ra,
+            "registration_number": student.registration_number,
             "course_id": str(student.course_id) if student.course_id else None,
             "class_id": str(student.class_id) if student.class_id else None,
             "status": student.status,
         }
 
         update_data = student_data.model_dump(exclude_unset=True)
+        ra = update_data.get("ra")
+        if ra and ra != student.ra and self.student_repo.get_by_ra(ra):
+            raise ConflictError("RA já cadastrado")
+        registration_number = update_data.get("registration_number")
+        if (
+            registration_number
+            and registration_number != student.registration_number
+            and self.student_repo.get_by_registration_number(registration_number)
+        ):
+            raise ConflictError("Matrícula institucional já cadastrada")
         for key, value in update_data.items():
             if hasattr(student, key):
                 setattr(student, key, value)
 
-        student.updated_at = datetime.now(timezone.utc)
+        student.updated_at = datetime.now(UTC)
         self.db.flush()
 
         self.audit_repo.log(
@@ -269,7 +295,7 @@ class TeacherService:
             raise NotFoundError("Professor não encontrado")
         return teacher
 
-    def get_teacher_by_user(self, user_id: UUID) -> Optional[Teacher]:
+    def get_teacher_by_user(self, user_id: UUID) -> Teacher | None:
         """Busca professor por user_id."""
         return self.teacher_repo.get_by_user_id(user_id)
 
@@ -284,11 +310,18 @@ class TeacherService:
         }
 
         update_data = teacher_data.model_dump(exclude_unset=True)
+        employee_id = update_data.get("employee_id")
+        if (
+            employee_id
+            and employee_id != teacher.employee_id
+            and self.teacher_repo.get_by_employee_id(employee_id)
+        ):
+            raise ConflictError("ID do funcionário já cadastrado")
         for key, value in update_data.items():
             if hasattr(teacher, key):
                 setattr(teacher, key, value)
 
-        teacher.updated_at = datetime.now(timezone.utc)
+        teacher.updated_at = datetime.now(UTC)
         self.db.flush()
 
         self.audit_repo.log(
@@ -347,7 +380,7 @@ class AdministratorService:
             raise NotFoundError("Administrador não encontrado")
         return admin
 
-    def get_administrator_by_user(self, user_id: UUID) -> Optional[Administrator]:
+    def get_administrator_by_user(self, user_id: UUID) -> Administrator | None:
         """Busca administrador por user_id."""
         return self.admin_repo.get_by_user_id(user_id)
 
@@ -360,7 +393,7 @@ class AdministratorService:
             if hasattr(admin, key):
                 setattr(admin, key, value)
 
-        admin.updated_at = datetime.now(timezone.utc)
+        admin.updated_at = datetime.now(UTC)
         self.db.flush()
 
         self.audit_repo.log(

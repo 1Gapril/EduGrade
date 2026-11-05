@@ -1,11 +1,10 @@
-from uuid import uuid4
 
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from backend.app.core.config import settings
 from backend.app.core.database import Base, get_db

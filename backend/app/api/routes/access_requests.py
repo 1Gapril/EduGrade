@@ -1,16 +1,15 @@
 """Rotas para solicitação pública e aprovação administrativa de acesso."""
 
-from datetime import datetime, timezone
 import secrets
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.core.database import get_db
 from backend.app.core.config import settings
+from backend.app.core.database import get_db
 from backend.app.core.security import require_admin
 from backend.app.integrations.email import EmailDeliveryError, send_account_credentials
 from backend.app.models.access_request import AccessRequest, AccessRequestStatus
@@ -81,7 +80,7 @@ def count_pending_requests(
 
 @router.get("", response_model=list[AccessRequestResponse])
 def list_access_requests(
-    request_status: Optional[AccessRequestStatus] = Query(default=None, alias="status"),
+    request_status: AccessRequestStatus | None = Query(default=None, alias="status"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -128,7 +127,7 @@ def create_account_from_request(
         )
         access_request.status = AccessRequestStatus.APPROVED
         access_request.account_id = user.id
-        access_request.updated_at = datetime.now(timezone.utc)
+        access_request.updated_at = datetime.now(UTC)
         db.commit()
         db.refresh(access_request)
     except EmailDeliveryError as exc:
@@ -153,7 +152,7 @@ def reject_access_request(
         raise HTTPException(status_code=409, detail="Esta solicitação já foi atendida")
 
     access_request.status = AccessRequestStatus.REJECTED
-    access_request.updated_at = datetime.now(timezone.utc)
+    access_request.updated_at = datetime.now(UTC)
     try:
         db.commit()
         db.refresh(access_request)

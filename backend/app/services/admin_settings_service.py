@@ -2,7 +2,7 @@
 
 import ipaddress
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import settings
-from backend.app.models.admin_settings import AIProviderConfig, AdminSetting
+from backend.app.models.admin_settings import AdminSetting, AIProviderConfig
 from backend.app.models.audit import AuditActionType, AuditLog
 from backend.app.models.user import User
 
@@ -48,7 +48,7 @@ RUNTIME_SETTING_KEYS = {
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _credential_cipher() -> Fernet:

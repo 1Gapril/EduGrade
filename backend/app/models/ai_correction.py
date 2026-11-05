@@ -3,10 +3,17 @@
 import enum
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+if TYPE_CHECKING:
+    from backend.app.models.exam import ExamQuestion, ExamSubmission, ExtractedAnswer
+    from backend.app.models.user import User
+
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -15,9 +22,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
-    CheckConstraint,
-    JSON,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship

@@ -1,7 +1,6 @@
 """Schemas para solicitações de acesso."""
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -13,7 +12,7 @@ class AccessRequestCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=255)
     email: EmailStr
     username: str = Field(min_length=3, max_length=100)
-    phone: Optional[str] = Field(default=None, max_length=40)
+    phone: str | None = Field(default=None, max_length=40)
     requested_role: str = Field(pattern="^(student|teacher|admin)$")
     justification: str = Field(min_length=10, max_length=2000)
 
@@ -28,11 +27,11 @@ class AccessRequestResponse(BaseModel):
     full_name: str
     email: str
     username: str
-    phone: Optional[str]
+    phone: str | None
     requested_role: str
     justification: str
     status: AccessRequestStatus
-    account_id: Optional[UUID]
+    account_id: UUID | None
     created_at: datetime
     updated_at: datetime
 

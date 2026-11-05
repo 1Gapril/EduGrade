@@ -2,7 +2,11 @@
 
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from backend.app.models.academic import Enrollment, TeacherSubject
 
 from sqlalchemy import (
     Boolean,
@@ -11,7 +15,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -125,6 +128,7 @@ class Student(Base):
         nullable=False,
         index=True,
     )
+    registration_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     course_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         nullable=True,
@@ -168,6 +172,7 @@ class Student(Base):
 
     __table_args__ = (
         Index("ix_students_course_class", "course_id", "class_id"),
+        Index("uq_students_registration_number", "registration_number", unique=True),
     )
 
     def __repr__(self) -> str:

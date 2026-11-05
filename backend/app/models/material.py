@@ -1,7 +1,12 @@
 """Materiais de estudo publicados por disciplina."""
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from backend.app.models.academic import Subject
+    from backend.app.models.user import User
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID

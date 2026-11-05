@@ -1,37 +1,55 @@
 """Service do Módulo Acadêmico."""
 
-from typing import Optional, List
-from uuid import UUID
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.app.core.exceptions import ConflictError, NotFoundError
 from backend.app.models.academic import (
-    Course, Subject, Class, AcademicPeriod, AcademicPeriodStatus,
-    Enrollment, EnrollmentStatus, TeacherSubject,
-    Assessment, AssessmentType, Grade, Attendance, AcademicRule
+    AcademicPeriod,
+    AcademicRule,
+    Assessment,
+    Attendance,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Grade,
+    Subject,
+    TeacherSubject,
 )
 from backend.app.repositories.academic_repository import (
-    CourseRepository, SubjectRepository, ClassRepository,
-    AcademicPeriodRepository, EnrollmentRepository,
-    TeacherSubjectRepository, AssessmentRepository,
-    GradeRepository, AttendanceRepository, AcademicRuleRepository
+    AcademicPeriodRepository,
+    AcademicRuleRepository,
+    AssessmentRepository,
+    AttendanceRepository,
+    ClassRepository,
+    CourseRepository,
+    EnrollmentRepository,
+    GradeRepository,
+    SubjectRepository,
+    TeacherSubjectRepository,
 )
+from backend.app.repositories.ai_correction_repository import AuditActionType, AuditLogRepository
 from backend.app.schemas.academic import (
-    CourseCreate, CourseUpdate,
-    SubjectCreate, SubjectUpdate,
-    ClassCreate, ClassUpdate,
-    AcademicPeriodCreate, AcademicPeriodUpdate,
-    EnrollmentCreate, EnrollmentUpdate,
+    AcademicPeriodCreate,
+    AcademicRuleCreate,
+    AssessmentCreate,
+    AttendanceCreate,
+    ClassCreate,
+    ClassUpdate,
+    CourseCreate,
+    CourseUpdate,
+    EnrollmentCreate,
+    EnrollmentUpdate,
+    GradeCreate,
+    GradeUpdate,
+    SubjectCreate,
+    SubjectUpdate,
     TeacherSubjectCreate,
-    AssessmentCreate, AssessmentUpdate,
-    GradeCreate, GradeUpdate,
-    AttendanceCreate, AttendanceUpdate,
-    AcademicRuleCreate, AcademicRuleUpdate,
 )
-from backend.app.core.exceptions import ValidationError, NotFoundError, ConflictError
-from backend.app.repositories.ai_correction_repository import AuditLogRepository, AuditActionType
 
 
 class CourseService:
@@ -63,13 +81,13 @@ class CourseService:
         old = {"code": course.code, "name": course.name, "is_active": course.is_active}
         for k, v in course_data.model_dump(exclude_unset=True).items():
             setattr(course, k, v)
-        course.updated_at = datetime.now(timezone.utc)
+        course.updated_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.UPDATE, f"Curso atualizado: {course.code}", updated_by,
                           "Course", course.id, old_values=old, new_values=course_data.model_dump(exclude_unset=True))
         return course
 
-    def list(self, active_only: bool = True) -> List[Course]:
+    def list(self, active_only: bool = True) -> list[Course]:
         return self.repo.get_active() if active_only else self.repo.get_all()
 
 
@@ -97,14 +115,14 @@ class SubjectService:
             raise NotFoundError("Disciplina não encontrada")
         return subject
 
-    def get_by_course(self, course_id: UUID) -> List[Subject]:
+    def get_by_course(self, course_id: UUID) -> list[Subject]:
         return self.repo.get_by_course(course_id)
 
     def update(self, subject_id: UUID, subject_data: SubjectUpdate, updated_by: UUID) -> Subject:
         subject = self.get(subject_id)
         for k, v in subject_data.model_dump(exclude_unset=True).items():
             setattr(subject, k, v)
-        subject.updated_at = datetime.now(timezone.utc)
+        subject.updated_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.UPDATE, f"Disciplina atualizada: {subject.code}", updated_by,
                           "Subject", subject.id, new_values=subject_data.model_dump(exclude_unset=True))
@@ -133,14 +151,14 @@ class ClassService:
             raise NotFoundError("Turma não encontrada")
         return cls
 
-    def get_by_teacher(self, teacher_id: UUID) -> List[Class]:
+    def get_by_teacher(self, teacher_id: UUID) -> list[Class]:
         return self.repo.get_by_teacher(teacher_id)
 
     def update(self, class_id: UUID, class_data: ClassUpdate, updated_by: UUID) -> Class:
         cls = self.get(class_id)
         for k, v in class_data.model_dump(exclude_unset=True).items():
             setattr(cls, k, v)
-        cls.updated_at = datetime.now(timezone.utc)
+        cls.updated_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.UPDATE, f"Turma atualizada: {cls.code}", updated_by,
                           "Class", cls.id, new_values=class_data.model_dump(exclude_unset=True))
@@ -174,7 +192,7 @@ class AcademicPeriodService:
             raise NotFoundError("Período não encontrado")
         return period
 
-    def get_current(self) -> Optional[AcademicPeriod]:
+    def get_current(self) -> AcademicPeriod | None:
         return self.repo.get_current()
 
     def set_current(self, period_id: UUID, updated_by: UUID) -> AcademicPeriod:
@@ -185,7 +203,7 @@ class AcademicPeriodService:
             current.is_current = False
         period = self.get(period_id)
         period.is_current = True
-        period.updated_at = datetime.now(timezone.utc)
+        period.updated_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.UPDATE, f"Período atual definido: {period.code}", updated_by,
                           "AcademicPeriod", period.id)
@@ -210,7 +228,7 @@ class EnrollmentService:
                           "Enrollment", enrollment.id, new_values=enrollment_data.model_dump())
         return enrollment
 
-    def bulk_create(self, class_id: UUID, student_ids: List[UUID], academic_period_id: UUID, created_by: UUID) -> List[Enrollment]:
+    def bulk_create(self, class_id: UUID, student_ids: list[UUID], academic_period_id: UUID, created_by: UUID) -> list[Enrollment]:
         """Matrícula em lote."""
         enrollments = []
         for student_id in student_ids:
@@ -237,13 +255,35 @@ class EnrollmentService:
 
     def update(self, enrollment_id: UUID, enrollment_data: EnrollmentUpdate, updated_by: UUID) -> Enrollment:
         enrollment = self.get(enrollment_id)
-        for k, v in enrollment_data.model_dump(exclude_unset=True).items():
+        old_values = {
+            "status": getattr(enrollment.status, "value", enrollment.status),
+            "final_grade": str(enrollment.final_grade) if enrollment.final_grade is not None else None,
+            "attendance_percentage": (
+                str(enrollment.attendance_percentage)
+                if enrollment.attendance_percentage is not None
+                else None
+            ),
+            "situation": enrollment.situation,
+        }
+        update_data = enrollment_data.model_dump(exclude_unset=True)
+        if "status" in update_data and not isinstance(update_data["status"], EnrollmentStatus):
+            update_data["status"] = EnrollmentStatus(update_data["status"])
+        for k, v in update_data.items():
             setattr(enrollment, k, v)
-        enrollment.updated_at = datetime.now(timezone.utc)
+        enrollment.updated_at = datetime.now(UTC)
         self.db.flush()
+        self.audit_repo.log(
+            AuditActionType.UPDATE,
+            "Matrícula atualizada",
+            updated_by,
+            "Enrollment",
+            enrollment.id,
+            old_values=old_values,
+            new_values=update_data,
+        )
         return enrollment
 
-    def get_by_student(self, student_id: UUID, academic_period_id: UUID) -> List[Enrollment]:
+    def get_by_student(self, student_id: UUID, academic_period_id: UUID) -> list[Enrollment]:
         return self.repo.get_by_student_period(student_id, academic_period_id)
 
 
@@ -278,7 +318,7 @@ class AssessmentService:
                           "Assessment", assessment.id, new_values={"is_published": True})
         return assessment
 
-    def calculate_final_grade(self, enrollment_id: UUID) -> Optional[Decimal]:
+    def calculate_final_grade(self, enrollment_id: UUID) -> Decimal | None:
         return self.grade_repo.calculate_weighted_average(enrollment_id)
 
 
@@ -294,7 +334,7 @@ class GradeService:
         existing = self.repo.get_by_enrollment_assessment(grade_data.enrollment_id, grade_data.assessment_id)
         if existing:
             raise ConflictError("Nota já existe para esta matrícula e avaliação")
-        grade = Grade(**grade_data.model_dump(), graded_by=graded_by, graded_at=datetime.now(timezone.utc))
+        grade = Grade(**grade_data.model_dump(), graded_by=graded_by, graded_at=datetime.now(UTC))
         self.db.add(grade)
         self.db.flush()
         self.audit_repo.log(AuditActionType.CREATE, "Nota criada", graded_by,
@@ -306,11 +346,12 @@ class GradeService:
         if not grade:
             raise NotFoundError("Nota não encontrada")
         old = {"score": str(grade.score), "is_official": grade.is_official}
+        was_official = grade.is_official
         for k, v in grade_data.model_dump(exclude_unset=True).items():
             setattr(grade, k, v)
-        grade.updated_at = datetime.now(timezone.utc)
-        if grade_data.is_official and not grade.is_official:
-            grade.published_at = datetime.now(timezone.utc)
+        grade.updated_at = datetime.now(UTC)
+        if grade_data.is_official and not was_official:
+            grade.published_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.GRADE_CHANGE, "Nota atualizada", updated_by,
                           "Grade", grade.id, old_values=old, new_values=grade_data.model_dump(exclude_unset=True))
@@ -321,7 +362,7 @@ class GradeService:
         if not grade:
             raise NotFoundError("Nota não encontrada")
         grade.is_official = True
-        grade.published_at = datetime.now(timezone.utc)
+        grade.published_at = datetime.now(UTC)
         self.db.flush()
         self.audit_repo.log(AuditActionType.GRADE_PUBLISH, "Nota publicada", published_by,
                           "Grade", grade.id)
@@ -346,7 +387,7 @@ class AttendanceService:
         self.db.flush()
         return attendance
 
-    def bulk_create(self, class_id: UUID, class_date: date, attendances: List[AttendanceCreate], recorded_by: UUID) -> List[Attendance]:
+    def bulk_create(self, class_id: UUID, class_date: date, attendances: list[AttendanceCreate], recorded_by: UUID) -> list[Attendance]:
         """Frequência em lote."""
         records = []
         for a in attendances:
@@ -369,14 +410,42 @@ class TeacherSubjectService:
         self.db = db
         self.repo = TeacherSubjectRepository(db)
 
+    def get(self, teacher_subject_id: UUID) -> TeacherSubject:
+        ts = self.repo.get(teacher_subject_id)
+        if not ts:
+            raise NotFoundError("Associação professor-disciplina não encontrada")
+        return ts
+
+    def list_by_teacher(self, teacher_id: UUID) -> list[TeacherSubject]:
+        return self.repo.get_by_teacher(teacher_id)
+
+    def list_by_subject(self, subject_id: UUID) -> list[TeacherSubject]:
+        return self.db.query(TeacherSubject).filter(TeacherSubject.subject_id == subject_id).all()
+
     def create(self, data: TeacherSubjectCreate) -> TeacherSubject:
-        existing = self.repo.get_by_teacher_subject(data.teacher_id, data.subject_id)
+        existing = self.repo.get_by_teacher_subject(
+            data.teacher_id,
+            data.subject_id,
+            data.academic_period_id,
+        )
         if existing:
             raise ConflictError("Associação já existe")
         ts = TeacherSubject(**data.model_dump())
         self.db.add(ts)
         self.db.flush()
         return ts
+
+    def update(self, teacher_subject_id: UUID, is_coordinator: bool | None = None) -> TeacherSubject:
+        ts = self.get(teacher_subject_id)
+        if is_coordinator is not None:
+            ts.is_coordinator = is_coordinator
+        self.db.flush()
+        return ts
+
+    def delete(self, teacher_subject_id: UUID) -> None:
+        ts = self.get(teacher_subject_id)
+        self.db.delete(ts)
+        self.db.flush()
 
 
 class AcademicRuleService:
@@ -394,5 +463,5 @@ class AcademicRuleService:
         self.db.flush()
         return rule
 
-    def get_by_type(self, rule_type: str) -> List[AcademicRule]:
+    def get_by_type(self, rule_type: str) -> list[AcademicRule]:
         return self.repo.get_by_type(rule_type)

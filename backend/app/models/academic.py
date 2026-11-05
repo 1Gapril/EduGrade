@@ -1,13 +1,15 @@
 """Modelos Acadêmicos: Cursos, Disciplinas, Turmas, Matrículas, Períodos, Avaliações, Notas, Frequência."""
 
 import enum
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -18,7 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    CheckConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.core.database import Base
 
 if TYPE_CHECKING:
+    from backend.app.models.exam import Exam
     from backend.app.models.user import Student, Teacher
 
 
@@ -45,6 +48,25 @@ class EnrollmentStatus(str, enum.Enum):
     GRADUATED = "graduated"
     DROPPED = "dropped"
     SUSPENDED = "suspended"
+
+
+ACADEMIC_ASSIGNMENT_PERMISSIONS = (
+    "view_students",
+    "create_students",
+    "edit_students",
+    "create_assessments",
+    "edit_assessments",
+    "manage_answer_keys",
+    "receive_submissions",
+    "upload_submissions",
+    "run_ocr",
+    "review_corrections",
+    "grade_questions",
+    "edit_grades",
+    "approve_corrections",
+    "publish_grades",
+    "view_history",
+)
 
 
 class AssessmentType(str, enum.Enum):
@@ -167,6 +189,11 @@ class Subject(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    academic_assignments: Mapped[list["AcademicAssignment"]] = relationship(
+        "AcademicAssignment",
+        back_populates="subject",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint("code", "course_id", name="uq_subject_code_course"),
@@ -262,6 +289,18 @@ class Class(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    academic_assignments: Mapped[list["AcademicAssignment"]] = relationship(
+        "AcademicAssignment",
+        back_populates="class_",
+        lazy="selectin",
+    )
+
+    @property
+    def enrollments_count(self) -> int:
+        return sum(
+            enrollment.status == EnrollmentStatus.ACTIVE
+            for enrollment in self.enrollments
+        )
 
     __table_args__ = (
         UniqueConstraint("course_id", "subject_id", "academic_period_id", "code", name="uq_class_unique"),
@@ -473,6 +512,83 @@ class TeacherSubject(Base):
 
     def __repr__(self) -> str:
         return f"<TeacherSubject(teacher_id={self.teacher_id}, subject_id={self.subject_id})>"
+
+
+class AcademicAssignment(Base):
+    """Teacher authorization scoped to one subject, class, and academic period."""
+
+    __tablename__ = "academic_assignments"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    teacher_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    subject_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    academic_period_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("academic_periods.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    permissions: Mapped[dict[str, bool]] = mapped_column(JSON, default=dict, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    assigned_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(datetime.now().astimezone().tzinfo),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(datetime.now().astimezone().tzinfo),
+        onupdate=lambda: datetime.now(datetime.now().astimezone().tzinfo),
+        nullable=False,
+    )
+
+    teacher: Mapped["Teacher"] = relationship("Teacher", lazy="selectin")
+    subject: Mapped[Subject] = relationship("Subject", back_populates="academic_assignments", lazy="selectin")
+    class_: Mapped[Class] = relationship("Class", back_populates="academic_assignments", lazy="selectin")
+    academic_period: Mapped[AcademicPeriod] = relationship("AcademicPeriod", lazy="selectin")
+
+    __table_args__ = (
+        Index(
+            "ix_academic_assignment_teacher_context_active",
+            "teacher_id",
+            "class_id",
+            "subject_id",
+            "academic_period_id",
+            "is_active",
+        ),
+        Index(
+            "uq_academic_assignment_active_context",
+            "teacher_id",
+            "class_id",
+            "subject_id",
+            "academic_period_id",
+            unique=True,
+            sqlite_where=text("is_active = 1"),
+            postgresql_where=text("is_active"),
+        ),
+    )
 
 
 class Assessment(Base):

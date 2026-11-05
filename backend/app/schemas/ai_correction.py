@@ -1,12 +1,11 @@
 """Schemas Pydantic para Correção por IA e Revisão."""
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from uuid import UUID
 from decimal import Decimal
+from typing import Any, Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # ==================== AI Correction Schemas ====================
 
@@ -14,7 +13,7 @@ class AICorrectionBase(BaseModel):
     """Campos base da correção por IA."""
     submission_id: UUID
     question_id: UUID
-    extracted_answer_id: Optional[UUID] = None
+    extracted_answer_id: UUID | None = None
     provider: str
     model: str
 
@@ -26,22 +25,22 @@ class AICorrectionCreate(AICorrectionBase):
 
 class AICorrectionUpdate(BaseModel):
     """Schema para atualização de correção por IA."""
-    status: Optional[str] = None
-    recognized_text: Optional[str] = None
-    interpretation: Optional[str] = None
-    suggested_score: Optional[Decimal] = Field(None, ge=0)
-    justification: Optional[str] = None
-    criteria_met: Optional[List[str]] = None
-    criteria_not_met: Optional[List[str]] = None
-    conceptual_errors: Optional[List[str]] = None
-    ocr_confidence: Optional[Decimal] = Field(None, ge=0, le=100)
-    evaluation_confidence: Optional[Decimal] = Field(None, ge=0, le=100)
-    requires_review: Optional[bool] = None
-    review_reason: Optional[str] = None
-    raw_response: Optional[Dict[str, Any]] = None
-    prompt_used: Optional[str] = None
-    processing_time_ms: Optional[int] = None
-    error_message: Optional[str] = None
+    status: str | None = None
+    recognized_text: str | None = None
+    interpretation: str | None = None
+    suggested_score: Decimal | None = Field(None, ge=0)
+    justification: str | None = None
+    criteria_met: list[str] | None = None
+    criteria_not_met: list[str] | None = None
+    conceptual_errors: list[str] | None = None
+    ocr_confidence: Decimal | None = Field(None, ge=0, le=100)
+    evaluation_confidence: Decimal | None = Field(None, ge=0, le=100)
+    requires_review: bool | None = None
+    review_reason: str | None = None
+    raw_response: dict[str, Any] | None = None
+    prompt_used: str | None = None
+    processing_time_ms: int | None = None
+    error_message: str | None = None
 
 
 class AICorrectionResponse(AICorrectionBase):
@@ -50,24 +49,24 @@ class AICorrectionResponse(AICorrectionBase):
 
     id: UUID
     status: str
-    recognized_text: Optional[str] = None
-    interpretation: Optional[str] = None
-    suggested_score: Optional[Decimal] = None
+    recognized_text: str | None = None
+    interpretation: str | None = None
+    suggested_score: Decimal | None = None
     max_score: Decimal
-    justification: Optional[str] = None
-    criteria_met: List[str]
-    criteria_not_met: List[str]
-    conceptual_errors: List[str]
-    ocr_confidence: Optional[Decimal] = None
-    evaluation_confidence: Optional[Decimal] = None
+    justification: str | None = None
+    criteria_met: list[str]
+    criteria_not_met: list[str]
+    conceptual_errors: list[str]
+    ocr_confidence: Decimal | None = None
+    evaluation_confidence: Decimal | None = None
     requires_review: bool
-    review_reason: Optional[str] = None
-    raw_response: Dict[str, Any]
-    prompt_used: Optional[str] = None
-    processing_time_ms: Optional[int] = None
-    error_message: Optional[str] = None
+    review_reason: str | None = None
+    raw_response: dict[str, Any]
+    prompt_used: str | None = None
+    processing_time_ms: int | None = None
+    error_message: str | None = None
     created_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
 
 class AICorrectionWithReview(AICorrectionResponse):
@@ -90,12 +89,12 @@ class CorrectionReviewCreate(CorrectionReviewBase):
 
 class CorrectionReviewUpdate(BaseModel):
     """Schema para atualização de revisão."""
-    status: Optional[str] = None
-    final_score: Optional[Decimal] = Field(None, ge=0)
-    corrected_text: Optional[str] = None
-    reviewer_justification: Optional[str] = None
-    reviewer_notes: Optional[str] = None
-    criteria_overrides: Optional[Dict[str, Any]] = None
+    status: str | None = None
+    final_score: Decimal | None = Field(None, ge=0)
+    corrected_text: str | None = None
+    reviewer_justification: str | None = None
+    reviewer_notes: str | None = None
+    criteria_overrides: dict[str, Any] | None = None
 
 
 class CorrectionReviewResponse(CorrectionReviewBase):
@@ -104,20 +103,20 @@ class CorrectionReviewResponse(CorrectionReviewBase):
 
     id: UUID
     status: str
-    original_suggested_score: Optional[Decimal] = None
-    final_score: Optional[Decimal] = None
-    corrected_text: Optional[str] = None
-    reviewer_justification: Optional[str] = None
-    reviewer_notes: Optional[str] = None
-    criteria_overrides: Dict[str, Any]
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    original_suggested_score: Decimal | None = None
+    final_score: Decimal | None = None
+    corrected_text: str | None = None
+    reviewer_justification: str | None = None
+    reviewer_notes: str | None = None
+    criteria_overrides: dict[str, Any]
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime
 
 
 class CorrectionReviewWithAudit(CorrectionReviewResponse):
     """Revisão com logs de auditoria."""
-    audit_logs: List["CorrectionAuditLogResponse"] = []
+    audit_logs: list["CorrectionAuditLogResponse"] = []
 
 
 # ==================== Correction Audit Log Schemas ====================
@@ -127,8 +126,8 @@ class CorrectionAuditLogBase(BaseModel):
     review_id: UUID
     action: str
     field_changed: str
-    old_value: Optional[str] = None
-    new_value: Optional[str] = None
+    old_value: str | None = None
+    new_value: str | None = None
     changed_by: UUID
 
 
@@ -143,8 +142,8 @@ class CorrectionAuditLogResponse(CorrectionAuditLogBase):
 
     id: UUID
     changed_at: datetime
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 # ==================== AI Provider Schemas ====================
@@ -153,8 +152,8 @@ class AIProviderConfig(BaseModel):
     """Configuração do provedor de IA."""
     provider: str = Field(..., pattern="^(mock|ollama|openai|anthropic)$")
     model: str
-    base_url: Optional[str] = None
-    api_key: Optional[str] = None
+    base_url: str | None = None
+    api_key: str | None = None
     timeout_seconds: int = Field(default=120, ge=10, le=600)
     max_retries: int = Field(default=3, ge=0, le=10)
 
@@ -164,14 +163,14 @@ class AIHealthCheck(BaseModel):
     provider: str
     status: str
     model: str
-    latency_ms: Optional[int] = None
-    error: Optional[str] = None
+    latency_ms: int | None = None
+    error: str | None = None
 
 
 class AIModelsList(BaseModel):
     """Lista de modelos disponíveis."""
     provider: str
-    models: List[str]
+    models: list[str]
 
 
 # ==================== Correction Request/Response ====================
@@ -179,11 +178,11 @@ class AIModelsList(BaseModel):
 class CorrectionRequest(BaseModel):
     """Requisição de correção para o provedor de IA."""
     question_statement: str
-    answer_key: Dict[str, Any]
-    rubric: Optional[Dict[str, Any]] = None
+    answer_key: dict[str, Any]
+    rubric: dict[str, Any] | None = None
     max_score: Decimal
     student_answer: str
-    student_answer_image: Optional[str] = None  # base64
+    student_answer_image: str | None = None  # base64
     question_type: str
 
 
@@ -194,14 +193,14 @@ class CorrectionResponse(BaseModel):
     suggested_score: Decimal
     max_score: Decimal
     justification: str
-    criteria_met: List[str]
-    criteria_not_met: List[str]
-    conceptual_errors: List[str]
-    ocr_confidence: Optional[Decimal] = None
+    criteria_met: list[str]
+    criteria_not_met: list[str]
+    conceptual_errors: list[str]
+    ocr_confidence: Decimal | None = None
     evaluation_confidence: Decimal
     requires_review: bool
-    review_reason: Optional[str] = None
-    raw_response: Dict[str, Any]
+    review_reason: str | None = None
+    raw_response: dict[str, Any]
     processing_time_ms: int
 
 
@@ -210,15 +209,15 @@ class CorrectionResponse(BaseModel):
 class BatchCorrectionRequest(BaseModel):
     """Requisição de correção em lote."""
     submission_id: UUID
-    question_ids: Optional[List[UUID]] = None  # None = todas
-    provider: Optional[str] = None
-    model: Optional[str] = None
+    question_ids: list[UUID] | None = None  # None = todas
+    provider: str | None = None
+    model: str | None = None
 
 
 class BatchCorrectionResponse(BaseModel):
     """Resposta de correção em lote."""
     submission_id: UUID
-    corrections: List[AICorrectionResponse]
+    corrections: list[AICorrectionResponse]
     total_processed: int
     failed: int
     requires_review_count: int

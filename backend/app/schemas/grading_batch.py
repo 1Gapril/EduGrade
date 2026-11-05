@@ -1,13 +1,12 @@
 """Schemas para Processamento em Lote (Batch Grading) - ADENDO OFICIAL."""
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any
+from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, Field
 
 # ==================== Enums ====================
 
@@ -74,9 +73,9 @@ class GradingBatchBase(BaseModel):
     graded_submissions: int
     pending_review: int
     failed_files: int
-    error_message: Optional[str]
-    processing_started_at: Optional[datetime]
-    processing_completed_at: Optional[datetime]
+    error_message: str | None
+    processing_started_at: datetime | None
+    processing_completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -88,15 +87,15 @@ class GradingBatchResponse(GradingBatchBase):
 
 class GradingBatchDetail(GradingBatchBase):
     """Schema de detalhes do lote (para painel)."""
-    file_stats: Dict[str, int] = Field(default_factory=dict)
-    submission_stats: Dict[str, int] = Field(default_factory=dict)
+    file_stats: dict[str, int] = Field(default_factory=dict)
+    submission_stats: dict[str, int] = Field(default_factory=dict)
     pending_identifications: int = 0
-    progress: Dict[str, Any] = Field(default_factory=dict)
+    progress: dict[str, Any] = Field(default_factory=dict)
 
 
 class GradingBatchList(BaseModel):
     """Lista paginada de lotes."""
-    items: List[GradingBatchResponse]
+    items: list[GradingBatchResponse]
     total: int
     page: int
     page_size: int
@@ -118,9 +117,9 @@ class GradingBatchFileBase(BaseModel):
     page_count: int
     status: FileStatus
     processed_pages: int
-    error_message: Optional[str]
+    error_message: str | None
     created_at: datetime
-    processed_at: Optional[datetime]
+    processed_at: datetime | None
 
 
 class GradingBatchFileResponse(GradingBatchFileBase):
@@ -136,14 +135,14 @@ class ExamSubmissionPageBase(BaseModel):
 
     id: UUID
     batch_file_id: UUID
-    submission_id: Optional[UUID]
+    submission_id: UUID | None
     page_number: int
     original_image_path: str
-    processed_image_path: Optional[str]
+    processed_image_path: str | None
     rotation_angle: float
     perspective_corrected: bool
-    ocr_confidence: Optional[Decimal]
-    full_text: Optional[str]
+    ocr_confidence: Decimal | None
+    full_text: str | None
     created_at: datetime
 
 
@@ -160,22 +159,22 @@ class StudentIdentificationResultBase(BaseModel):
 
     id: UUID
     page_id: UUID
-    submission_id: Optional[UUID]
-    identified_ra: Optional[str]
-    identified_matricula: Optional[str]
-    identified_name: Optional[str]
-    identified_exam_code: Optional[str]
-    identified_class_code: Optional[str]
-    identified_copy_code: Optional[str]
-    matched_student_id: Optional[UUID]
-    ra_confidence: Optional[Decimal]
-    matricula_confidence: Optional[Decimal]
+    submission_id: UUID | None
+    identified_ra: str | None
+    identified_matricula: str | None
+    identified_name: str | None
+    identified_exam_code: str | None
+    identified_class_code: str | None
+    identified_copy_code: str | None
+    matched_student_id: UUID | None
+    ra_confidence: Decimal | None
+    matricula_confidence: Decimal | None
     match_type: str
     status: IdentificationStatus
-    conflict_details: Dict[str, Any]
+    conflict_details: dict[str, Any]
     manual_override: bool
-    overridden_by: Optional[UUID]
-    overridden_at: Optional[datetime]
+    overridden_by: UUID | None
+    overridden_at: datetime | None
     ai_provider: str
     ai_model: str
     created_at: datetime
@@ -193,7 +192,7 @@ class StudentIdentificationUpdate(BaseModel):
 
 class PendingIdentificationsResponse(BaseModel):
     """Resposta para identificações pendentes."""
-    items: List[StudentIdentificationResultResponse]
+    items: list[StudentIdentificationResultResponse]
     total: int
 
 
@@ -205,15 +204,15 @@ class ExamPageGroupBase(BaseModel):
 
     id: UUID
     batch_id: UUID
-    student_id: Optional[UUID]
+    student_id: UUID | None
     exam_id: UUID
     version_id: UUID
-    copy_identifier: Optional[str]
-    page_ids: List[str]
+    copy_identifier: str | None
+    page_ids: list[str]
     status: PageGroupStatus
-    confidence: Optional[Decimal]
-    conflict_details: Dict[str, Any]
-    created_submission_id: Optional[UUID]
+    confidence: Decimal | None
+    conflict_details: dict[str, Any]
+    created_submission_id: UUID | None
     created_at: datetime
 
 
@@ -226,7 +225,7 @@ class ExamPageGroupResponse(ExamPageGroupBase):
 
 class BatchProcessingStart(BaseModel):
     """Schema para iniciar processamento."""
-    steps: Optional[List[str]] = Field(
+    steps: list[str] | None = Field(
         default=None,
         description="Etapas a executar: process_pages, identify, group, create_submissions, grade"
     )
@@ -236,7 +235,7 @@ class BatchProgressResponse(BaseModel):
     """Resposta de progresso do lote."""
     batch_id: UUID
     status: BatchStatus
-    progress: Dict[str, Any]
-    file_stats: Dict[str, int]
-    submission_stats: Dict[str, int]
+    progress: dict[str, Any]
+    file_stats: dict[str, int]
+    submission_stats: dict[str, int]
     pending_identifications: int

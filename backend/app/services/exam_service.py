@@ -1,36 +1,63 @@
 """Service de Provas, Questões, Impressão e Submissões."""
 
-from typing import Optional, List
-from uuid import UUID
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from backend.app.models.exam import (
-    Exam, ExamStatus, ExamVersion, ExamQuestion, QuestionType,
-    AnswerKey, GradingRubric, ExamCopy, ExamPrintLog, PrintStatus,
-    ExamSubmission, SubmissionStatus, SubmissionPage, ExtractedAnswer
+from backend.app.core.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
 )
-from backend.app.repositories.exam_repository import (
-    ExamRepository, ExamVersionRepository, ExamQuestionRepository,
-    AnswerKeyRepository, GradingRubricRepository, ExamCopyRepository,
-    ExamPrintLogRepository, ExamSubmissionRepository,
-    SubmissionPageRepository, ExtractedAnswerRepository
-)
-from backend.app.schemas.exam import (
-    ExamCreate, ExamUpdate, ExamUpdateWithQuestions,
-    QuestionCreate, QuestionUpdate,
-    AnswerKeyCreate, AnswerKeyUpdate,
-    GradingRubricCreate, GradingRubricUpdate,
-    ExamCopyCreate, ExamPrintLogCreate,
-    SubmissionCreate, SubmissionUpdate,
-    SubmissionPageCreate, ExtractedAnswerCreate,
-)
-from backend.app.core.exceptions import ValidationError, NotFoundError, ConflictError
-from backend.app.repositories.ai_correction_repository import AuditLogRepository, AuditActionType
 from backend.app.integrations.pdf.generator import PDFGenerator
 from backend.app.integrations.qr.generator import QRCodeGenerator
+from backend.app.models.academic import Class, Enrollment, EnrollmentStatus
+from backend.app.models.exam import (
+    AnswerKey,
+    Exam,
+    ExamCopy,
+    ExamPrintLog,
+    ExamQuestion,
+    ExamStatus,
+    ExamSubmission,
+    ExamVersion,
+    ExtractedAnswer,
+    GradingRubric,
+    QuestionType,
+    SubmissionPage,
+    SubmissionStatus,
+)
+from backend.app.models.user import Student, User, UserRole
+from backend.app.repositories.ai_correction_repository import AuditActionType, AuditLogRepository
+from backend.app.repositories.exam_repository import (
+    AnswerKeyRepository,
+    ExamCopyRepository,
+    ExamPrintLogRepository,
+    ExamQuestionRepository,
+    ExamRepository,
+    ExamSubmissionRepository,
+    ExamVersionRepository,
+    ExtractedAnswerRepository,
+    GradingRubricRepository,
+    SubmissionPageRepository,
+)
+from backend.app.schemas.exam import (
+    AnswerKeyCreate,
+    AnswerKeyUpdate,
+    ExamCreate,
+    ExamPrintLogCreate,
+    ExamUpdate,
+    ExamUpdateWithQuestions,
+    GradingRubricCreate,
+    GradingRubricUpdate,
+    QuestionCreate,
+    QuestionUpdate,
+    SubmissionCreate,
+    SubmissionPageCreate,
+)
 
 
 class ExamService:
@@ -59,13 +86,48 @@ class ExamService:
             raise NotFoundError("Prova não encontrada")
         return exam
 
+    def _assert_can_manage(self, exam: Exam, user_id: UUID) -> None:
+        """Garante que o usuário pode gerenciar a prova.
+
+        Administradores podem gerenciar qualquer prova. Professores só podem
+        gerenciar provas de turmas que lecionam.
+        """
+        user = self.db.get(User, user_id)
+        if user is None:
+            raise AuthorizationError("Usuário não encontrado")
+        if user.role == UserRole.ADMIN:
+            return
+        if user.role != UserRole.TEACHER:
+            raise AuthorizationError("Permissão insuficiente para esta operação")
+        teacher_id = user.teacher_profile.id if user.teacher_profile else None
+        class_obj = self.db.get(Class, exam.class_id)
+        if not class_obj or teacher_id is None or class_obj.teacher_id != teacher_id:
+            raise AuthorizationError("Você não leciona esta turma")
+
+    def _assert_can_manage_class(self, class_id: UUID, user_id: UUID) -> None:
+        """Garante que o usuário pode usar a turma informada."""
+        user = self.db.get(User, user_id)
+        if user is None:
+            raise AuthorizationError("Usuário não encontrado")
+        if user.role == UserRole.ADMIN:
+            return
+        if user.role != UserRole.TEACHER:
+            raise AuthorizationError("Permissão insuficiente para esta operação")
+        teacher_id = user.teacher_profile.id if user.teacher_profile else None
+        class_obj = self.db.get(Class, class_id)
+        if not class_obj:
+            raise NotFoundError("Turma não encontrada")
+        if teacher_id is None or class_obj.teacher_id != teacher_id:
+            raise AuthorizationError("Você não leciona esta turma")
+
     def update(self, exam_id: UUID, exam_data: ExamUpdate, updated_by: UUID) -> Exam:
         exam = self.get(exam_id)
+        self._assert_can_manage(exam, updated_by)
         if exam.status not in [ExamStatus.DRAFT, ExamStatus.IN_EDIT]:
             raise ValidationError("Só é possível editar provas em rascunho ou edição")
         for k, v in exam_data.model_dump(exclude_unset=True).items():
             setattr(exam, k, v)
-        exam.updated_at = datetime.now(timezone.utc)
+        exam.updated_at = datetime.now(UTC)
         self.db.flush()
         return exam
 
@@ -73,6 +135,8 @@ class ExamService:
         self, exam_id: UUID, exam_data: ExamUpdateWithQuestions, updated_by: UUID
     ) -> Exam:
         exam = self.get(exam_id)
+        self._assert_can_manage(exam, updated_by)
+        self._assert_can_manage_class(exam_data.class_id, updated_by)
         if exam.status not in [ExamStatus.DRAFT, ExamStatus.IN_EDIT]:
             raise ValidationError("Somente provas em rascunho podem ser editadas.")
 
@@ -87,7 +151,7 @@ class ExamService:
         exam_fields = exam_data.model_dump(exclude={"questions"})
         for field, value in exam_fields.items():
             setattr(exam, field, value)
-        exam.updated_at = datetime.now(timezone.utc)
+        exam.updated_at = datetime.now(UTC)
 
         # Move orders out of the way before assigning new positions to avoid
         # conflicts with the unique (exam_id, question_order) constraint.
@@ -136,11 +200,12 @@ class ExamService:
 
     def cancel(self, exam_id: UUID, cancelled_by: UUID) -> Exam:
         exam = self.get(exam_id)
+        self._assert_can_manage(exam, cancelled_by)
         if exam.status == ExamStatus.CANCELLED:
             return exam
 
         exam.status = ExamStatus.CANCELLED
-        exam.updated_at = datetime.now(timezone.utc)
+        exam.updated_at = datetime.now(UTC)
         for version in exam.versions:
             version.is_active = False
         self.audit_repo.log(
@@ -160,6 +225,7 @@ class ExamService:
     def publish(self, exam_id: UUID, published_by: UUID) -> ExamVersion:
         """Publica a prova criando versão imutável."""
         exam = self.get(exam_id)
+        self._assert_can_manage(exam, published_by)
         total_q, total_questions, valid = self.validate_scores(exam_id)
         if not valid:
             raise ValidationError(f"Soma das questões ({total_questions}) difere do total configurado ({total_q})")
@@ -225,7 +291,7 @@ class ExamService:
         self.db.add(version)
         exam.version = version_num
         exam.status = ExamStatus.PUBLISHED
-        exam.published_at = datetime.now(timezone.utc)
+        exam.published_at = datetime.now(UTC)
         self.db.flush()
 
         self.audit_repo.log(AuditActionType.EXAM_PUBLISH, f"Prova publicada v{version_num}: {exam.title}", published_by,
@@ -266,11 +332,11 @@ class QuestionService:
             raise ValidationError("Não pode editar questão de prova publicada")
         for k, v in question_data.model_dump(exclude_unset=True).items():
             setattr(question, k, v)
-        question.updated_at = datetime.now(timezone.utc)
+        question.updated_at = datetime.now(UTC)
         self.db.flush()
         return question
 
-    def reorder(self, exam_id: UUID, question_orders: List[dict]) -> List[ExamQuestion]:
+    def reorder(self, exam_id: UUID, question_orders: list[dict]) -> list[ExamQuestion]:
         """Reordena questões: [{id, order}, ...]"""
         questions = self.repo.get_by_exam(exam_id)
         qmap = {q.id: q for q in questions}
@@ -307,7 +373,7 @@ class AnswerKeyService:
             raise NotFoundError("Gabarito não encontrado")
         for k, v in data.model_dump(exclude_unset=True).items():
             setattr(ak, k, v)
-        ak.updated_at = datetime.now(timezone.utc)
+        ak.updated_at = datetime.now(UTC)
         self.db.flush()
         return ak
 
@@ -337,7 +403,7 @@ class GradingRubricService:
             raise NotFoundError("Rubrica não encontrada")
         for k, v in data.model_dump(exclude_unset=True).items():
             setattr(rubric, k, v)
-        rubric.updated_at = datetime.now(timezone.utc)
+        rubric.updated_at = datetime.now(UTC)
         self.db.flush()
         return rubric
 
@@ -355,8 +421,8 @@ class ExamCopyService:
         self.pdf_gen = PDFGenerator()
         self.qr_gen = QRCodeGenerator()
 
-    def generate_copies(self, version_id: UUID, count: int, student_ids: Optional[List[UUID]] = None,
-                       generated_by: UUID = None) -> List[ExamCopy]:
+    def generate_copies(self, version_id: UUID, count: int, student_ids: list[UUID] | None = None,
+                       generated_by: UUID = None) -> list[ExamCopy]:
         """Gera cópias para impressão."""
         version = self.version_repo.get(version_id)
         if not version:
@@ -405,7 +471,7 @@ class ExamCopyService:
         )
 
         copy.pdf_path = pdf_path
-        copy.printed_at = datetime.now(timezone.utc)
+        copy.printed_at = datetime.now(UTC)
         copy.printed_by = generated_by
         self.db.flush()
 
@@ -472,7 +538,7 @@ class SubmissionService:
                           "ExamSubmission", submission.id)
         return submission
 
-    def add_pages(self, submission_id: UUID, pages: List[SubmissionPageCreate]) -> List[SubmissionPage]:
+    def add_pages(self, submission_id: UUID, pages: list[SubmissionPageCreate]) -> list[SubmissionPage]:
         """Adiciona páginas à submissão."""
         submission = self.repo.get(submission_id)
         if not submission:
@@ -528,28 +594,72 @@ class SubmissionService:
                 page.extracted_answers.append(answer)
 
         submission.status = SubmissionStatus.PROCESSED
-        submission.processed_at = datetime.now(timezone.utc)
+        submission.processed_at = datetime.now(UTC)
         submission.processed_files = [p.processed_image_path for p in submission.pages if p.processed_image_path]
         self.db.flush()
 
         return submission
 
-    def identify_student(self, submission_id: UUID, student_id: UUID, confidence: Decimal,
-                        manual: bool = False) -> ExamSubmission:
+    def identify_student(
+        self,
+        submission_id: UUID,
+        student_id: UUID,
+        confidence: Decimal,
+        manual: bool = False,
+        identified_by: UUID | None = None,
+    ) -> ExamSubmission:
         """Identifica aluno da submissão (via QR Code ou manual)."""
         submission = self.repo.get(submission_id)
         if not submission:
             raise NotFoundError("Submissão não encontrada")
 
+        version = self.db.get(ExamVersion, submission.version_id)
+        if version is None:
+            raise NotFoundError("Versão da prova não encontrada")
+        exam = self.db.get(Exam, version.exam_id)
+        if exam is None:
+            raise NotFoundError("Prova não encontrada")
+        student = self.db.get(Student, student_id)
+        if student is None:
+            raise NotFoundError("Aluno não encontrado")
+        enrollment = self.db.query(Enrollment.id).filter(
+            Enrollment.student_id == student.id,
+            Enrollment.class_id == exam.class_id,
+            Enrollment.academic_period_id == exam.academic_period_id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        ).first()
+        if enrollment is None:
+            raise ValidationError("O aluno não possui matrícula ativa na turma da prova")
+
+        if submission.copy_id and not manual:
+            copy = self.db.get(ExamCopy, submission.copy_id)
+            if copy is not None and copy.student_id is not None and copy.student_id != student.id:
+                raise ValidationError("O aluno identificado não corresponde à cópia personalizada")
+
+        old_student_id = str(submission.student_id) if submission.student_id else None
         submission.identified_student_id = student_id
         submission.identification_confidence = confidence
         submission.manual_identification = manual
         submission.student_id = student_id
         self.db.flush()
+        self.audit_repo.log(
+            AuditActionType.UPDATE,
+            "Aluno identificado na submissão",
+            identified_by,
+            "ExamSubmission",
+            submission.id,
+            old_values={"student_id": old_student_id},
+            new_values={
+                "student_id": str(student.id),
+                "ra": student.ra,
+                "registration_number": student.registration_number,
+                "manual": manual,
+            },
+        )
 
         return submission
 
-    def request_ai_correction(self, submission_id: UUID, question_ids: Optional[List[UUID]] = None) -> ExamSubmission:
+    def request_ai_correction(self, submission_id: UUID, question_ids: list[UUID] | None = None) -> ExamSubmission:
         """Solicita correção por IA."""
         submission = self.repo.get(submission_id)
         if not submission:

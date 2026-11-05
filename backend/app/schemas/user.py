@@ -1,12 +1,9 @@
 """Schemas Pydantic para Usuário e Autenticação."""
 
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
-from decimal import Decimal
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 # ==================== Base Schemas ====================
 
@@ -25,11 +22,11 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     """Schema para atualização de usuário."""
-    email: Optional[EmailStr] = None
-    username: Optional[str] = Field(None, min_length=3, max_length=100)
-    full_name: Optional[str] = Field(None, min_length=2, max_length=255)
-    is_active: Optional[bool] = None
-    role: Optional[str] = Field(None, pattern="^(student|teacher|admin)$")
+    email: EmailStr | None = None
+    username: str | None = Field(None, min_length=3, max_length=100)
+    full_name: str | None = Field(None, min_length=2, max_length=255)
+    is_active: bool | None = None
+    role: str | None = Field(None, pattern="^(student|teacher|admin)$")
 
 
 class UserUpdatePassword(BaseModel):
@@ -49,7 +46,7 @@ class UserResponse(UserBase):
     role: str
     is_active: bool
     is_superuser: bool
-    last_login: Optional[datetime] = None
+    last_login: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -72,21 +69,24 @@ class UserListResponse(BaseModel):
 class StudentBase(BaseModel):
     """Campos base do aluno."""
     ra: str = Field(..., min_length=1, max_length=50)
+    registration_number: str | None = Field(None, min_length=1, max_length=50)
 
 
 class StudentCreate(StudentBase):
     """Schema para criação de aluno."""
+    registration_number: str = Field(..., min_length=1, max_length=50)
     user_id: UUID
-    course_id: Optional[UUID] = None
-    class_id: Optional[UUID] = None
+    course_id: UUID | None = None
+    class_id: UUID | None = None
 
 
 class StudentUpdate(BaseModel):
     """Schema para atualização de aluno."""
-    ra: Optional[str] = Field(None, min_length=1, max_length=50)
-    course_id: Optional[UUID] = None
-    class_id: Optional[UUID] = None
-    status: Optional[str] = None
+    ra: str | None = Field(None, min_length=1, max_length=50)
+    registration_number: str | None = Field(None, min_length=1, max_length=50)
+    course_id: UUID | None = None
+    class_id: UUID | None = None
+    status: str | None = None
 
 
 class StudentResponse(StudentBase):
@@ -95,8 +95,8 @@ class StudentResponse(StudentBase):
 
     id: UUID
     user_id: UUID
-    course_id: Optional[UUID] = None
-    class_id: Optional[UUID] = None
+    course_id: UUID | None = None
+    class_id: UUID | None = None
     enrollment_date: datetime
     status: str
     created_at: datetime
@@ -113,7 +113,7 @@ class StudentWithUserResponse(StudentResponse):
 class TeacherBase(BaseModel):
     """Campos base do professor."""
     employee_id: str = Field(..., min_length=1, max_length=50)
-    department: Optional[str] = Field(None, max_length=100)
+    department: str | None = Field(None, max_length=100)
 
 
 class TeacherCreate(TeacherBase):
@@ -123,9 +123,9 @@ class TeacherCreate(TeacherBase):
 
 class TeacherUpdate(BaseModel):
     """Schema para atualização de professor."""
-    employee_id: Optional[str] = Field(None, min_length=1, max_length=50)
-    department: Optional[str] = Field(None, max_length=100)
-    status: Optional[str] = None
+    employee_id: str | None = Field(None, min_length=1, max_length=50)
+    department: str | None = Field(None, max_length=100)
+    status: str | None = None
 
 
 class TeacherResponse(TeacherBase):
@@ -145,12 +145,65 @@ class TeacherWithUserResponse(TeacherResponse):
     user: UserResponse
 
 
+class UserProvisionCreate(BaseModel):
+    """Cria uma conta e seu perfil acadêmico na mesma transação."""
+
+    user: UserCreate
+    student_ra: str | None = Field(None, min_length=1, max_length=50)
+    student_registration_number: str | None = Field(None, min_length=1, max_length=50)
+    student_course_id: UUID | None = None
+    student_class_id: UUID | None = None
+    teacher_employee_id: str | None = Field(None, min_length=1, max_length=50)
+    teacher_department: str | None = Field(None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_profile(self):
+        if self.user.role == "student":
+            if not self.student_ra:
+                raise ValueError("RA obrigatório para criar perfil de aluno")
+            if not self.student_registration_number:
+                raise ValueError("Matrícula institucional obrigatória para criar perfil de aluno")
+            if self.teacher_employee_id is not None:
+                raise ValueError("Dados funcionais não se aplicam a um aluno")
+            if self.teacher_department is not None:
+                raise ValueError("Dados funcionais não se aplicam a um aluno")
+        elif self.user.role == "teacher":
+            if not self.teacher_employee_id:
+                raise ValueError("Identificação funcional obrigatória para criar perfil de professor")
+            if (
+                self.student_ra is not None
+                or self.student_registration_number is not None
+                or self.student_class_id is not None
+                or self.student_course_id is not None
+            ):
+                raise ValueError("Dados de matrícula não se aplicam a um professor")
+        else:
+            raise ValueError("Use a operação de usuário padrão para criar administradores")
+        return self
+
+
+class UserProvisionResponse(BaseModel):
+    """Conta e perfil criados conjuntamente."""
+
+    user: UserResponse
+    student: StudentResponse | None = None
+    teacher: TeacherResponse | None = None
+
+
+class AcademicUserProfileUpdate(BaseModel):
+    """Atualiza a conta e seu perfil acadêmico na mesma transação."""
+
+    user: UserUpdate
+    student: StudentUpdate | None = None
+    teacher: TeacherUpdate | None = None
+
+
 # ==================== Administrator Schemas ====================
 
 class AdministratorBase(BaseModel):
     """Campos base do administrador."""
     employee_id: str = Field(..., min_length=1, max_length=50)
-    department: Optional[str] = Field(None, max_length=100)
+    department: str | None = Field(None, max_length=100)
     permissions: str = "full"
 
 
@@ -161,9 +214,9 @@ class AdministratorCreate(AdministratorBase):
 
 class AdministratorUpdate(BaseModel):
     """Schema para atualização de administrador."""
-    employee_id: Optional[str] = Field(None, min_length=1, max_length=50)
-    department: Optional[str] = Field(None, max_length=100)
-    permissions: Optional[str] = None
+    employee_id: str | None = Field(None, min_length=1, max_length=50)
+    department: str | None = Field(None, max_length=100)
+    permissions: str | None = None
 
 
 class AdministratorResponse(AdministratorBase):
@@ -213,6 +266,6 @@ class TokenPayload(BaseModel):
 class ProfileResponse(BaseModel):
     """Perfil completo do usuário logado."""
     user: UserResponse
-    student: Optional[StudentResponse] = None
-    teacher: Optional[TeacherResponse] = None
-    administrator: Optional[AdministratorResponse] = None
+    student: StudentResponse | None = None
+    teacher: TeacherResponse | None = None
+    administrator: AdministratorResponse | None = None

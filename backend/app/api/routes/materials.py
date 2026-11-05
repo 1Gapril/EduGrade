@@ -1,6 +1,5 @@
 """Rotas de publicação e acesso a materiais de estudo por disciplina."""
 
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
@@ -48,7 +47,7 @@ def list_teacher_subjects(
 
 @router.get("/teacher", response_model=list[StudyMaterialResponse])
 def list_teacher_materials(
-    subject_id: Optional[UUID] = Query(None),
+    subject_id: UUID | None = Query(None),
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
@@ -63,7 +62,7 @@ def list_teacher_materials(
 async def upload_material(
     subject_id: UUID = Form(...),
     title: str = Form(..., min_length=2, max_length=255),
-    description: Optional[str] = Form(None, max_length=5000),
+    description: str | None = Form(None, max_length=5000),
     file: UploadFile = File(...),
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),

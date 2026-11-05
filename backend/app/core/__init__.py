@@ -1,7 +1,7 @@
 """Core package initialization."""
 
-from backend.app.core.config import settings, get_settings
-from backend.app.core.database import Base, engine, SessionLocal, get_db, init_db, drop_db
+from backend.app.core.config import get_settings, settings
+from backend.app.core.database import Base, SessionLocal, drop_db, engine, get_db, init_db
 
 __all__ = [
     # Config

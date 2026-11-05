@@ -1,10 +1,10 @@
 """Base Repository com operações CRUD genéricas."""
 
-from typing import Generic, TypeVar, Optional, List, Any
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select, func, update, delete
-from sqlalchemy.orm import Session, Query
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from backend.app.core.database import Base
 
@@ -18,11 +18,11 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.db = db
 
-    def get(self, id: UUID) -> Optional[ModelType]:
+    def get(self, id: UUID) -> ModelType | None:
         """Busca por ID."""
         return self.db.get(self.model, id)
 
-    def get_by_field(self, field: str, value: Any) -> Optional[ModelType]:
+    def get_by_field(self, field: str, value: Any) -> ModelType | None:
         """Busca por campo específico."""
         stmt = select(self.model).where(getattr(self.model, field) == value)
         return self.db.execute(stmt).scalar_one_or_none()
@@ -31,10 +31,10 @@ class BaseRepository(Generic[ModelType]):
         self,
         skip: int = 0,
         limit: int = 100,
-        filters: Optional[dict] = None,
-        order_by: Optional[str] = None,
+        filters: dict | None = None,
+        order_by: str | None = None,
         order_desc: bool = False,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """Lista todos com paginação e filtros."""
         stmt = select(self.model)
 
@@ -50,7 +50,7 @@ class BaseRepository(Generic[ModelType]):
         stmt = stmt.offset(skip).limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
-    def count(self, filters: Optional[dict] = None) -> int:
+    def count(self, filters: dict | None = None) -> int:
         """Conta total com filtros."""
         stmt = select(func.count()).select_from(self.model)
 
@@ -68,7 +68,7 @@ class BaseRepository(Generic[ModelType]):
         self.db.flush()
         return db_obj
 
-    def update(self, id: UUID, obj_in: dict) -> Optional[ModelType]:
+    def update(self, id: UUID, obj_in: dict) -> ModelType | None:
         """Atualiza registro."""
         db_obj = self.get(id)
         if not db_obj:
@@ -95,14 +95,14 @@ class BaseRepository(Generic[ModelType]):
         """Verifica se existe."""
         return self.get(id) is not None
 
-    def bulk_create(self, objects: List[dict]) -> List[ModelType]:
+    def bulk_create(self, objects: list[dict]) -> list[ModelType]:
         """Cria em lote."""
         db_objects = [self.model(**obj) for obj in objects]
         self.db.add_all(db_objects)
         self.db.flush()
         return db_objects
 
-    def bulk_update(self, updates: List[dict]) -> int:
+    def bulk_update(self, updates: list[dict]) -> int:
         """Atualiza em lote. Cada dict deve conter 'id'."""
         count = 0
         for update_data in updates:

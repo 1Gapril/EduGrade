@@ -1,16 +1,21 @@
 """Modelos de Provas: Exames, Versões, Questões, Gabaritos, Rubricas, Cópias, Submissões."""
 
 import enum
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
+    from backend.app.models.academic import AcademicPeriod, Class, Subject
+    from backend.app.models.ai_correction import AICorrection
     from backend.app.models.grading_batch import GradingBatch
+    from backend.app.models.user import Student
 
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -21,8 +26,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    CheckConstraint,
-    JSON,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -568,7 +571,7 @@ class ExamSubmission(Base):
     )
 
     # Relacionamentos
-    copy: Mapped[Optional[ExamCopy]] = relationship("ExamCopy", back_populates="submissions", lazy="selectin")
+    copy: Mapped[ExamCopy | None] = relationship("ExamCopy", back_populates="submissions", lazy="selectin")
     batch: Mapped[Optional["GradingBatch"]] = relationship("GradingBatch", back_populates="submissions", lazy="selectin")
     version: Mapped[ExamVersion] = relationship(lazy="selectin")
     student: Mapped["Student"] = relationship(

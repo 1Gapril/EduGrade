@@ -1,12 +1,18 @@
 """Rotas de Autenticação."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user
 from backend.app.models.user import User
-from backend.app.schemas.user import LoginRequest, TokenResponse, RefreshTokenRequest, UserResponse, UserUpdatePassword
+from backend.app.schemas.user import (
+    LoginRequest,
+    RefreshTokenRequest,
+    TokenResponse,
+    UserResponse,
+    UserUpdatePassword,
+)
 from backend.app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])

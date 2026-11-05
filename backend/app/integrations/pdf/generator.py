@@ -1,29 +1,26 @@
 """Gerador de PDF para provas e gabaritos."""
 
-from typing import List, Dict, Any, Optional
-from uuid import UUID
-from decimal import Decimal
-from pathlib import Path
 from datetime import datetime
-
-from reportlab.lib.pagesizes import A4, LETTER
-from reportlab.lib.units import cm, mm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY, TA_RIGHT
-from reportlab.lib.colors import HexColor, black, white, grey
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    PageBreak, Image, Frame, PageTemplate, BaseDocTemplate,
-    KeepTogether, HRFlowable
-)
-from reportlab.lib import colors
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import qrcode
 from io import BytesIO
+from pathlib import Path
 
-from backend.app.models.exam import Exam, ExamVersion, ExamCopy
-from backend.app.models.academic import Class, Subject
+import qrcode
+from reportlab.lib.colors import HexColor, grey
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.lib.pagesizes import A4, LETTER
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm, mm
+from reportlab.platypus import (
+    HRFlowable,
+    Image,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
+from backend.app.models.exam import Exam, ExamCopy, ExamVersion
 
 
 class PDFGenerator:
@@ -157,11 +154,10 @@ class PDFGenerator:
             story.append(Spacer(1, 20))
             story.extend(self._build_footer_qr(copy))
 
-        page_callback = None
-        if print_config.get("include_page_numbers", True):
-            page_callback = lambda canvas, page_doc: self._add_page_number(
-                canvas, page_doc, pagesize
-            )
+        def page_callback(canvas, page_doc):
+            if print_config.get("include_page_numbers", True):
+                self._add_page_number(canvas, page_doc, pagesize)
+
         doc.build(story, onFirstPage=page_callback, onLaterPages=page_callback)
         return str(filepath)
 
@@ -221,11 +217,10 @@ class PDFGenerator:
             story.extend(self._build_answer_key_question(q_data, i + 1, answer_key, rubric))
             story.append(Spacer(1, 10))
 
-        page_callback = None
-        if print_config.get("include_page_numbers", True):
-            page_callback = lambda canvas, page_doc: self._add_page_number(
-                canvas, page_doc, pagesize
-            )
+        def page_callback(canvas, page_doc):
+            if print_config.get("include_page_numbers", True):
+                self._add_page_number(canvas, page_doc, pagesize)
+
         doc.build(story, onFirstPage=page_callback, onLaterPages=page_callback)
         return str(filepath)
 
@@ -235,7 +230,7 @@ class PDFGenerator:
         version: ExamVersion,
         copy: ExamCopy,
         include_student_identification: bool = True,
-    ) -> List:
+    ) -> list:
         """Constrói cabeçalho da prova."""
         elements = []
 
@@ -299,9 +294,16 @@ class PDFGenerator:
 
         return elements
 
-    def _build_question(self, q_data: Dict, number: int, show_answer: bool = False) -> List:
+    def _build_question(
+        self,
+        q_data: dict,
+        number: int,
+        show_answer: bool = False,
+        answer_key: dict | None = None,
+    ) -> list:
         """Constrói uma questão."""
         elements = []
+        answer_key = answer_key or {}
 
         q_type = q_data.get('type', 'multiple_choice')
         statement = q_data.get('statement', '')
@@ -345,7 +347,7 @@ class PDFGenerator:
 
         return elements
 
-    def _build_answer_key_question(self, q_data: Dict, number: int, answer_key: Dict, rubric: Dict) -> List:
+    def _build_answer_key_question(self, q_data: dict, number: int, answer_key: dict, rubric: dict) -> list:
         """Constrói questão do gabarito."""
         elements = []
 
@@ -399,7 +401,7 @@ class PDFGenerator:
 
         return elements
 
-    def _build_footer_qr(self, copy: ExamCopy) -> List:
+    def _build_footer_qr(self, copy: ExamCopy) -> list:
         """Constrói rodapé com QR Code."""
         elements = []
         elements.append(HRFlowable(width="100%", thickness=0.5, color=grey, spaceAfter=8))

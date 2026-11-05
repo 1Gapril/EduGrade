@@ -1,18 +1,23 @@
 """Seed inicial do banco de dados com dados de demonstração."""
 
-from datetime import datetime, date, timezone
-from uuid import uuid4
 import logging
+from datetime import date
 
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from backend.app.core.security import get_password_hash
-from backend.app.models.user import User, UserRole, Student, Teacher, Administrator
 from backend.app.models.academic import (
-    Course, Subject, Class, AcademicPeriod, AcademicPeriodStatus,
-    Enrollment, EnrollmentStatus
+    AcademicPeriod,
+    AcademicPeriodStatus,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Subject,
+    TeacherSubject,
 )
+from backend.app.models.user import Administrator, Student, Teacher, User, UserRole
 
 logger = logging.getLogger("edugrade.seed")
 
@@ -106,6 +111,14 @@ def seed_database(db: Session) -> bool:
         department="Departamento de Computação",
     )
     db.add(teacher_profile)
+    db.flush()
+    db.add(
+        TeacherSubject(
+            teacher_id=teacher_profile.id,
+            subject_id=subject.id,
+            academic_period_id=period.id,
+        )
+    )
 
     # Aluno
     student_user = User(
@@ -160,4 +173,3 @@ def seed_database(db: Session) -> bool:
     db.commit()
     logger.info("Banco de dados populado com sucesso!")
     return True
-
