@@ -77,6 +77,25 @@ class ExamCreateWithQuestions(ExamCreate):
         return self
 
 
+class ExamQuestionDraftUpdate(ExamQuestionDraft):
+    """Questão existente ou nova enviada ao editar uma prova."""
+    id: Optional[UUID] = None
+
+
+class ExamUpdateWithQuestions(ExamBase):
+    """Atualização completa de uma prova em rascunho."""
+    questions: List[ExamQuestionDraftUpdate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_question_scores(self):
+        question_total = sum((question.score for question in self.questions), Decimal("0"))
+        if question_total != self.total_score:
+            raise ValueError(
+                f"A soma das questões ({question_total}) deve ser igual ao valor total ({self.total_score})."
+            )
+        return self
+
+
 class ImportedExamQuestion(BaseModel):
     """Questão extraída por IA, aguardando conferência do professor."""
 

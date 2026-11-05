@@ -172,6 +172,10 @@ class Exam(Base):
     def __repr__(self) -> str:
         return f"<Exam(id={self.id}, title={self.title}, status={self.status})>"
 
+    @property
+    def questions_count(self) -> int:
+        return len(self.questions)
+
 
 class ExamVersion(Base):
     """Versão imutável de uma prova (gerada na publicação)."""

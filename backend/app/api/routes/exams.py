@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user, require_teacher_or_admin, require_admin
-from backend.app.models.user import User, UserRole
+from backend.app.models.user import User, UserRole, Teacher
 from backend.app.models.exam import Exam, ExamStatus, ExamVersion
+from backend.app.models.academic import Class
 from backend.app.schemas.exam import (
-    ExamCreate, ExamCreateWithQuestions, ExamPDFImportResponse, ExamUpdate, ExamResponse, ExamWithRelations,
+    ExamCreate, ExamCreateWithQuestions, ExamUpdateWithQuestions, ExamPDFImportResponse,
+    ExamUpdate, ExamResponse, ExamWithRelations,
     QuestionCreate, QuestionUpdate, QuestionResponse, QuestionWithAnswerKey,
     AnswerKeyCreate, AnswerKeyUpdate, AnswerKeyResponse,
     GradingRubricCreate, GradingRubricUpdate, GradingRubricResponse,
@@ -92,6 +94,23 @@ def create_complete_exam(
     db: Session = Depends(get_db),
 ):
     """Cria prova, questões e gabaritos na mesma transação."""
+    # Validar se professor leciona a turma
+    if current_user.role == UserRole.TEACHER:
+        if not current_user.teacher_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Perfil de professor não encontrado"
+            )
+        teacher_id = current_user.teacher_profile.id
+        class_obj = db.query(Class).filter(Class.id == exam_data.class_id).first()
+        if not class_obj:
+            raise HTTPException(status_code=404, detail="Turma não encontrada")
+        if class_obj.teacher_id != teacher_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não leciona esta turma"
+            )
+
     exam_service = ExamService(db)
     question_service = QuestionService(db)
     answer_key_service = AnswerKeyService(db)
@@ -138,6 +157,23 @@ def create_exam(
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
+    # Validar se professor leciona a turma
+    if current_user.role == UserRole.TEACHER:
+        if not current_user.teacher_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Perfil de professor não encontrado"
+            )
+        teacher_id = current_user.teacher_profile.id
+        class_obj = db.query(Class).filter(Class.id == exam_data.class_id).first()
+        if not class_obj:
+            raise HTTPException(status_code=404, detail="Turma não encontrada")
+        if class_obj.teacher_id != teacher_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não leciona esta turma"
+            )
+
     service = ExamService(db)
     exam = service.create(exam_data, current_user.id)
     try:
@@ -158,6 +194,49 @@ def list_exams(
     db: Session = Depends(get_db),
 ):
     service = ExamService(db)
+
+    # Se for professor (não admin), filtrar apenas provas das turmas que leciona
+    if current_user.role == UserRole.TEACHER:
+        if not current_user.teacher_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Perfil de professor não encontrado"
+            )
+        teacher_id = current_user.teacher_profile.id
+        # Buscar IDs das turmas do professor
+        teacher_class_ids = [
+            c.id for c in db.query(Class).filter(Class.teacher_id == teacher_id).all()
+        ]
+        if class_id:
+            # Se foi passado class_id, verificar se o professor leciona essa turma
+            if class_id not in teacher_class_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Você não leciona esta turma"
+                )
+            exams = service.repo.get_by_class(class_id)
+        elif status:
+            from backend.app.models.exam import ExamStatus
+            exams = service.repo.get_by_status(ExamStatus(status))
+            # Filtrar por turmas do professor
+            exams = [e for e in exams if e.class_id in teacher_class_ids]
+        else:
+            # Buscar provas apenas das turmas do professor
+            exams = []
+            for class_id_ in teacher_class_ids:
+                exams.extend(service.repo.get_by_class(class_id_))
+            # Ordenar por data de criação (mais recentes primeiro)
+            exams.sort(key=lambda e: e.created_at, reverse=True)
+            # Aplicar paginação manual
+            total = len(exams)
+            exams = exams[params.offset:params.offset + params.limit]
+        return PaginatedResponse(
+            items=exams, total=total, page=params.page, page_size=params.page_size,
+            total_pages=(total + params.page_size - 1) // params.page_size,
+            has_next=params.page * params.page_size < total, has_prev=params.page > 1,
+        )
+
+    # Admin vê tudo (comportamento original)
     if class_id:
         exams = service.repo.get_by_class(class_id)
     elif status:
@@ -179,13 +258,26 @@ def list_active_exam_versions(
     db: Session = Depends(get_db),
 ):
     """Lista versões publicadas disponíveis para receber provas respondidas."""
-    versions = (
+    query = (
         db.query(ExamVersion)
         .join(Exam, Exam.id == ExamVersion.exam_id)
         .filter(ExamVersion.is_active.is_(True), Exam.status == ExamStatus.PUBLISHED)
-        .order_by(Exam.title, ExamVersion.version_number.desc())
-        .all()
     )
+
+    # Se for professor, filtrar apenas versões de provas das turmas que leciona
+    if current_user.role == UserRole.TEACHER:
+        if not current_user.teacher_profile:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Perfil de professor não encontrado"
+            )
+        teacher_id = current_user.teacher_profile.id
+        teacher_class_ids = [
+            c.id for c in db.query(Class).filter(Class.teacher_id == teacher_id).all()
+        ]
+        query = query.filter(Exam.class_id.in_(teacher_class_ids))
+
+    versions = query.order_by(Exam.title, ExamVersion.version_number.desc()).all()
     return [
         {
             "version_id": str(version.id),
@@ -220,6 +312,43 @@ def update_exam(
     service = ExamService(db)
     exam = service.update(exam_id, exam_data, current_user.id)
     try:
+        db.commit()
+        db.refresh(exam)
+    except Exception:
+        db.rollback()
+        raise
+    return exam
+
+
+@router.patch("/{exam_id}/complete", response_model=ExamResponse)
+def update_complete_exam(
+    exam_id: UUID,
+    exam_data: ExamUpdateWithQuestions,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Atualiza dados, questões e gabaritos de uma prova em rascunho."""
+    service = ExamService(db)
+    try:
+        exam = service.update_with_questions(exam_id, exam_data, current_user.id)
+        db.commit()
+        db.refresh(exam)
+    except Exception:
+        db.rollback()
+        raise
+    return exam
+
+
+@router.delete("/{exam_id}", response_model=ExamResponse)
+def cancel_exam(
+    exam_id: UUID,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Cancela uma prova preservando versões, cópias e histórico."""
+    service = ExamService(db)
+    try:
+        exam = service.cancel(exam_id, current_user.id)
         db.commit()
         db.refresh(exam)
     except Exception:
@@ -401,7 +530,7 @@ def update_rubric(
 def generate_copies(
     version_id: UUID,
     count: int = Query(..., ge=1, le=500),
-    student_ids: Optional[List[UUID]] = None,
+    student_ids: Optional[List[UUID]] = Query(None),
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):

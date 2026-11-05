@@ -19,7 +19,7 @@ from backend.app.repositories.exam_repository import (
     SubmissionPageRepository, ExtractedAnswerRepository
 )
 from backend.app.schemas.exam import (
-    ExamCreate, ExamUpdate,
+    ExamCreate, ExamUpdate, ExamUpdateWithQuestions,
     QuestionCreate, QuestionUpdate,
     AnswerKeyCreate, AnswerKeyUpdate,
     GradingRubricCreate, GradingRubricUpdate,
@@ -69,6 +69,91 @@ class ExamService:
         self.db.flush()
         return exam
 
+    def update_with_questions(
+        self, exam_id: UUID, exam_data: ExamUpdateWithQuestions, updated_by: UUID
+    ) -> Exam:
+        exam = self.get(exam_id)
+        if exam.status not in [ExamStatus.DRAFT, ExamStatus.IN_EDIT]:
+            raise ValidationError("Somente provas em rascunho podem ser editadas.")
+
+        existing_questions = self.question_repo.get_by_exam(exam_id)
+        existing_by_id = {question.id: question for question in existing_questions}
+        submitted_ids = [question.id for question in exam_data.questions if question.id]
+        if len(submitted_ids) != len(set(submitted_ids)):
+            raise ValidationError("Uma questão foi enviada mais de uma vez.")
+        if any(question_id not in existing_by_id for question_id in submitted_ids):
+            raise ValidationError("Uma das questões não pertence a esta prova.")
+
+        exam_fields = exam_data.model_dump(exclude={"questions"})
+        for field, value in exam_fields.items():
+            setattr(exam, field, value)
+        exam.updated_at = datetime.now(timezone.utc)
+
+        # Move orders out of the way before assigning new positions to avoid
+        # conflicts with the unique (exam_id, question_order) constraint.
+        order_offset = len(existing_questions) + len(exam_data.questions) + 1
+        for question in existing_questions:
+            question.question_order += order_offset
+        self.db.flush()
+
+        for order, question_data in enumerate(exam_data.questions, start=1):
+            question = existing_by_id.get(question_data.id) if question_data.id else None
+            if question is None:
+                question = ExamQuestion(exam_id=exam.id)
+                self.db.add(question)
+
+            question.question_order = order
+            question.type = QuestionType(question_data.type)
+            question.statement = question_data.statement
+            question.score = question_data.score
+            question.config = question_data.config
+            self.db.flush()
+
+            answer_key = question.answer_key
+            if answer_key is None:
+                answer_key = AnswerKey(question_id=question.id)
+                self.db.add(answer_key)
+            answer_key.correct_answer = question_data.correct_answer
+            answer_key.expected_answer = question_data.expected_answer
+            answer_key.accepted_alternatives = question_data.accepted_alternatives
+            answer_key.keywords = question_data.keywords
+            answer_key.required_concepts = question_data.required_concepts
+            answer_key.justification = question_data.justification
+
+        for question in existing_questions:
+            if question.id not in submitted_ids:
+                self.db.delete(question)
+
+        self.audit_repo.log(
+            AuditActionType.UPDATE,
+            f"Prova atualizada: {exam.title}",
+            updated_by,
+            "Exam",
+            exam.id,
+        )
+        self.db.flush()
+        return exam
+
+    def cancel(self, exam_id: UUID, cancelled_by: UUID) -> Exam:
+        exam = self.get(exam_id)
+        if exam.status == ExamStatus.CANCELLED:
+            return exam
+
+        exam.status = ExamStatus.CANCELLED
+        exam.updated_at = datetime.now(timezone.utc)
+        for version in exam.versions:
+            version.is_active = False
+        self.audit_repo.log(
+            AuditActionType.DELETE,
+            f"Prova cancelada: {exam.title}",
+            cancelled_by,
+            "Exam",
+            exam.id,
+            new_values={"status": ExamStatus.CANCELLED.value},
+        )
+        self.db.flush()
+        return exam
+
     def validate_scores(self, exam_id: UUID) -> tuple[Decimal, Decimal, bool]:
         return self.repo.validate_total_score(exam_id)
 
@@ -85,7 +170,8 @@ class ExamService:
 
         # Verifica se todas têm gabarito
         for q in questions:
-            if not self.question_repo.get_with_answer_key(q.id):
+            question_with_ak = self.question_repo.get_with_answer_key(q.id)
+            if not question_with_ak or not question_with_ak.answer_key:
                 raise ValidationError(f"Questão {q.question_order} não possui gabarito")
 
         # Cria snapshot

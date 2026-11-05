@@ -61,9 +61,10 @@ const WORKSPACE_SCREENS = {
   },
   '/exams/list.html': {
     title: 'Banco de provas',
-    description: 'Provas cadastradas no sistema.',
+    description: 'Consulte as provas e acesse as opções disponíveis.',
     roles: ['admin', 'teacher'],
     endpoint: '/exams?page=1&page_size=100',
+    examList: true,
   },
   '/exams/detail.html': {
     title: 'Detalhes da prova',
@@ -74,22 +75,23 @@ const WORKSPACE_SCREENS = {
   },
   '/exams/edit.html': {
     title: 'Editar prova',
-    description: 'A edição de provas pela interface ainda não está implementada.',
+    description: 'Atualize os dados, as questões e os gabaritos de um rascunho.',
     roles: ['admin', 'teacher'],
-    message: 'A API permite atualizar uma prova, mas esta tela ainda não possui formulário de edição.',
-    examDetail: true,
+    editExam: true,
   },
   '/professor/exams.html': {
     title: 'Minhas provas',
-    description: 'Provas cadastradas no sistema.',
+    description: 'Consulte suas provas e acesse as opções disponíveis.',
     roles: ['teacher'],
     endpoint: '/exams?page=1&page_size=100',
+    examList: true,
   },
   '/aluno/exams.html': {
     title: 'Minhas provas',
-    description: 'Provas disponíveis no sistema.',
+    description: 'Consulte as informações das provas disponíveis.',
     roles: ['student'],
     endpoint: '/exams?page=1&page_size=100',
+    examList: true,
   },
   '/exams/create.html': {
     title: 'Nova prova',
@@ -101,7 +103,7 @@ const WORKSPACE_SCREENS = {
     title: 'Impressão de provas',
     description: 'Geração de cópias e registro de impressão.',
     roles: ['admin', 'teacher'],
-    message: 'A impressão depende da seleção de uma prova publicada. Selecione uma prova no banco de provas para continuar.',
+    printExams: true,
   },
   '/correcao-lote.html': {
     title: 'Correção em lote',
@@ -231,6 +233,126 @@ function renderWorkspaceTable(container, rows) {
   }
   table.appendChild(body);
   container.replaceChildren(table);
+}
+
+function renderExamList(container, exams) {
+  container.classList.add('workspace-exam-list');
+  container.replaceChildren();
+  exams = exams.filter(exam => exam.status !== 'cancelled');
+
+  if (exams.length === 0) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'workspace-empty-state';
+    emptyState.textContent = 'Nenhuma prova foi encontrada.';
+    container.appendChild(emptyState);
+    return;
+  }
+
+  const statuses = {
+    draft: 'Rascunho',
+    in_edit: 'Em edição',
+    awaiting_validation: 'Aguardando validação',
+    published: 'Publicada',
+    printed: 'Impressa',
+    in_application: 'Em aplicação',
+    awaiting_correction: 'Aguardando correção',
+    in_correction: 'Em correção',
+    awaiting_review: 'Aguardando revisão',
+    finalized: 'Finalizada',
+    cancelled: 'Cancelada',
+  };
+  const canPrint = State.hasRole('admin', 'teacher');
+
+  for (const exam of exams) {
+    const card = document.createElement('article');
+    card.className = 'workspace-exam-card';
+
+    const header = document.createElement('div');
+    header.className = 'workspace-exam-card-header';
+    const title = document.createElement('h2');
+    title.className = 'workspace-exam-title';
+    title.textContent = exam.title || 'Prova sem título';
+
+    const status = document.createElement('span');
+    status.className = `workspace-exam-status status-${exam.status || 'unknown'}`;
+    status.textContent = statuses[exam.status] || 'Status não disponível';
+    header.append(title, status);
+    card.appendChild(header);
+
+    const context = document.createElement('p');
+    context.className = 'workspace-exam-context';
+    context.textContent = [
+      exam.subject?.name,
+      exam.class_?.name,
+    ].filter(Boolean).join(' · ') || 'Turma e disciplina não informadas';
+    card.appendChild(context);
+
+    const details = document.createElement('dl');
+    details.className = 'workspace-exam-details';
+    const values = [
+      ['Questões', exam.questions_count ?? '—'],
+      ['Valor total', exam.total_score != null
+        ? `${Number(exam.total_score).toLocaleString('pt-BR')} pontos`
+        : '—'],
+      ['Duração', exam.duration_minutes ? `${exam.duration_minutes} min` : '—'],
+      ['Data', exam.scheduled_date
+        ? new Date(`${exam.scheduled_date}T00:00:00`).toLocaleDateString('pt-BR')
+        : 'Não definida'],
+    ];
+    for (const [label, value] of values) {
+      const item = document.createElement('div');
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const description = document.createElement('dd');
+      description.textContent = String(value);
+      item.append(term, description);
+      details.appendChild(item);
+    }
+    card.appendChild(details);
+
+    const actions = document.createElement('div');
+    actions.className = 'workspace-exam-actions';
+    if (canPrint && ['draft', 'in_edit'].includes(exam.status)) {
+      const editLink = document.createElement('a');
+      editLink.className = 'btn btn-secondary btn-sm';
+      editLink.href = `/exams/edit.html?id=${encodeURIComponent(exam.id)}`;
+      editLink.textContent = 'Editar';
+      actions.appendChild(editLink);
+    }
+    if (canPrint && ['published', 'printed'].includes(exam.status)) {
+      const printLink = document.createElement('a');
+      printLink.className = 'btn btn-secondary btn-sm';
+      printLink.href = '/exams/print.html';
+      printLink.textContent = 'Imprimir prova';
+      actions.appendChild(printLink);
+    }
+    if (canPrint) {
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'btn btn-danger btn-sm';
+      removeButton.textContent = 'Remover';
+      removeButton.addEventListener('click', async () => {
+        const action = ['published', 'printed'].includes(exam.status) ? 'cancelar' : 'remover';
+        if (!window.confirm(`Deseja ${action} a prova "${exam.title}"? Ela deixará de aparecer nesta lista.`)) return;
+        removeButton.disabled = true;
+        try {
+          await api.delete('/exams', exam.id);
+          card.remove();
+          if (!container.querySelector('.workspace-exam-card')) {
+            renderExamList(container, []);
+          }
+          showWorkspaceMessage('A prova foi removida da lista.');
+        } catch (error) {
+          showWorkspaceMessage(error.message || 'Não foi possível remover a prova.', true);
+          removeButton.disabled = false;
+        }
+      });
+      actions.appendChild(removeButton);
+    }
+    if (actions.childElementCount) card.appendChild(actions);
+
+    container.appendChild(card);
+  }
 }
 
 function createUserCell(value) {
@@ -614,7 +736,7 @@ function splitCommaSeparated(value) {
   return value.split(',').map(item => item.trim()).filter(Boolean);
 }
 
-async function loadCreateExamScreen(container) {
+async function loadCreateExamScreen(container, editExamId = null) {
   if (!State.hasRole('admin', 'teacher')) {
     window.location.replace(Auth.dashboardPath());
     return;
@@ -734,6 +856,10 @@ async function loadCreateExamScreen(container) {
   const saveButton = form.querySelector('#save-exam');
   const importForm = container.querySelector('#exam-pdf-import-form');
   const importStatus = container.querySelector('#exam-import-status');
+  if (editExamId) {
+    importForm.hidden = true;
+    saveButton.textContent = 'Salvar alterações';
+  }
   let savedExam = null;
   let examVersion = null;
   let importedDraft = false;
@@ -856,8 +982,11 @@ async function loadCreateExamScreen(container) {
   });
 
   try {
+    // Professores veem apenas suas turmas; admins veem todas
+    const isTeacher = State.hasRole('teacher') && !State.hasRole('admin');
+    const classesEndpoint = isTeacher ? '/academic/classes/my?page=1&page_size=100' : '/academic/classes?page=1&page_size=100';
     const [classesResponse, periodsResponse] = await Promise.all([
-      api.request('/academic/classes?page=1&page_size=100'),
+      api.request(classesEndpoint),
       api.request('/academic/periods?page=1&page_size=100'),
     ]);
     const classes = classesResponse.items || [];
@@ -882,7 +1011,12 @@ async function loadCreateExamScreen(container) {
     });
 
     if (classes.length === 0) {
-      showWorkspaceMessage('Cadastre uma turma, disciplina e período letivo antes de criar uma prova.', true);
+      showWorkspaceMessage(
+        isTeacher
+          ? 'Você não possui turmas atribuídas. Peça ao administrador para vincular você a uma turma.'
+          : 'Cadastre uma turma, disciplina e período letivo antes de criar uma prova.',
+        true
+      );
       classSelect.disabled = true;
       form.querySelector('#save-exam').disabled = true;
       return;
@@ -891,6 +1025,61 @@ async function loadCreateExamScreen(container) {
     showWorkspaceMessage(error.message || 'Não foi possível carregar turmas e períodos.', true);
     form.querySelector('#save-exam').disabled = true;
     return;
+  }
+
+  if (editExamId) {
+    try {
+      const exam = await api.request(`/exams/${encodeURIComponent(editExamId)}`);
+      if (!['draft', 'in_edit'].includes(exam.status)) {
+        throw new Error('Somente provas em rascunho podem ser editadas. Provas publicadas permanecem protegidas.');
+      }
+      savedExam = exam;
+      form.elements.title.value = exam.title;
+      form.elements.duration_minutes.value = exam.duration_minutes;
+      form.elements.scheduled_date.value = exam.scheduled_date || '';
+      form.elements.description.value = exam.description || '';
+      form.elements.instructions.value = exam.instructions || '';
+      form.querySelector('#exam-paper-size').value = exam.print_config?.page_size || 'A4';
+      form.querySelector('#exam-identification').checked =
+        exam.print_config?.include_student_identification ?? true;
+      form.querySelector('#exam-qr-code').checked = exam.print_config?.include_qr_code ?? true;
+      form.querySelector('#exam-page-numbers').checked = exam.print_config?.include_page_numbers ?? true;
+      classSelect.value = exam.class_id;
+      classSelect.dispatchEvent(new Event('change'));
+
+      const questions = normalizeRows(
+        await api.request(`/exams/${encodeURIComponent(editExamId)}/questions`),
+      );
+      questionList.replaceChildren();
+      for (const [index, question] of questions.entries()) {
+        const card = addQuestion();
+        card.dataset.questionId = question.id;
+        const typeSelect = card.querySelector('[data-question-type]');
+        typeSelect.value = question.type;
+        typeSelect.dispatchEvent(new Event('change'));
+        card.querySelector('[data-question-score]').value = question.score;
+        card.querySelector('[data-question-statement]').value = question.statement || '';
+        card.querySelector('[data-expected-answer]').value = question.answer_key?.expected_answer || '';
+        card.querySelector('[data-keywords]').value = (question.answer_key?.keywords || []).join(', ');
+        card.querySelector('[data-required-concepts]').value =
+          (question.answer_key?.required_concepts || []).join(', ');
+        card.querySelector('[data-accepted-alternatives]').value =
+          (question.answer_key?.accepted_alternatives || []).join(', ');
+        card.querySelector('[data-justification]').value = question.answer_key?.justification || '';
+        const alternatives = question.config?.alternatives || [];
+        'ABCDEFGHIJ'.split('').forEach((letter, alternativeIndex) => {
+          card.querySelector(`[data-alternative="${letter}"]`).value = alternatives[alternativeIndex] || '';
+        });
+        card.querySelector('[data-correct-answer]').value = question.answer_key?.correct_answer || '';
+        if (index === 0) card.querySelector('[data-question-score]').dispatchEvent(new Event('input'));
+      }
+      updateQuestionTotals();
+      saveButton.textContent = 'Salvar alterações';
+    } catch (error) {
+      form.remove();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar a prova para edição.', true);
+      return;
+    }
   }
 
   const generatePrintOptions = document.createElement('section');
@@ -1068,68 +1257,93 @@ async function loadCreateExamScreen(container) {
     }
   });
 
+  const collectExamData = () => {
+    const questions = [...questionList.querySelectorAll('[data-question-card]')].map(card => {
+      const type = card.querySelector('[data-question-type]').value;
+      const alternatives = 'ABCDEFGHIJ'.split('')
+        .map(letter => card.querySelector(`[data-alternative="${letter}"]`).value.trim())
+        .filter(Boolean);
+      const expectedAnswer = card.querySelector('[data-expected-answer]').value.trim();
+      const keywords = splitCommaSeparated(card.querySelector('[data-keywords]').value);
+      const requiredConcepts = splitCommaSeparated(card.querySelector('[data-required-concepts]').value);
+      const acceptedAlternatives = splitCommaSeparated(
+        card.querySelector('[data-accepted-alternatives]').value,
+      );
+
+      return {
+        ...(editExamId ? { id: card.dataset.questionId || null } : {}),
+        type,
+        statement: card.querySelector('[data-question-statement]').value.trim(),
+        score: card.querySelector('[data-question-score]').value,
+        config: type === 'multiple_choice'
+          ? { alternatives }
+          : { answer_lines: type === 'essay' ? 12 : 8 },
+        correct_answer: type === 'multiple_choice'
+          ? card.querySelector('[data-correct-answer]').value
+          : null,
+        expected_answer: type === 'multiple_choice' ? null : expectedAnswer,
+        accepted_alternatives: acceptedAlternatives,
+        keywords,
+        required_concepts: requiredConcepts,
+        justification: card.querySelector('[data-justification]').value.trim() || null,
+      };
+    });
+
+    for (const [index, question] of questions.entries()) {
+      if (question.type === 'multiple_choice' && !question.correct_answer) {
+        showWorkspaceMessage(`Confira e selecione o gabarito da questão ${index + 1}.`, true);
+        return null;
+      }
+      if (question.type !== 'multiple_choice'
+        && !question.expected_answer
+        && question.keywords.length === 0
+        && question.required_concepts.length === 0) {
+        showWorkspaceMessage(`Preencha o gabarito da questão ${index + 1}.`, true);
+        return null;
+      }
+    }
+
+    const examData = Object.fromEntries(new FormData(form).entries());
+    examData.class_id = classSelect.value;
+    examData.total_score = totalScore.value;
+    examData.duration_minutes = Number(examData.duration_minutes);
+    examData.print_config = {
+      page_size: form.querySelector('#exam-paper-size').value,
+      include_student_identification: form.querySelector('#exam-identification').checked,
+      include_qr_code: form.querySelector('#exam-qr-code').checked,
+      include_page_numbers: form.querySelector('#exam-page-numbers').checked,
+    };
+    examData.questions = questions;
+    for (const key of ['description', 'instructions', 'scheduled_date']) {
+      if (!examData[key]) examData[key] = null;
+    }
+    return examData;
+  };
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (editExamId) {
+      UI.setLoading(saveButton, true);
+      try {
+        const examData = collectExamData();
+        if (!examData) return;
+        await api.request(`/exams/${encodeURIComponent(editExamId)}/complete`, {
+          method: 'PATCH',
+          body: examData,
+        });
+        showWorkspaceMessage('As alterações da prova foram salvas.');
+      } catch (error) {
+        showWorkspaceMessage(error.message || 'Não foi possível salvar as alterações.', true);
+      } finally {
+        UI.setLoading(saveButton, false);
+      }
+      return;
+    }
+
     if (!savedExam) {
-      const questions = [...questionList.querySelectorAll('[data-question-card]')].map(card => {
-        const type = card.querySelector('[data-question-type]').value;
-        const alternatives = 'ABCDEFGHIJ'.split('')
-          .map(letter => card.querySelector(`[data-alternative="${letter}"]`).value.trim())
-          .filter(Boolean);
-        const expectedAnswer = card.querySelector('[data-expected-answer]').value.trim();
-        const keywords = splitCommaSeparated(card.querySelector('[data-keywords]').value);
-        const requiredConcepts = splitCommaSeparated(card.querySelector('[data-required-concepts]').value);
-        const acceptedAlternatives = splitCommaSeparated(
-          card.querySelector('[data-accepted-alternatives]').value,
-        );
-
-        return {
-          type,
-          statement: card.querySelector('[data-question-statement]').value.trim(),
-          score: card.querySelector('[data-question-score]').value,
-          config: type === 'multiple_choice'
-            ? { alternatives }
-            : { answer_lines: type === 'essay' ? 12 : 8 },
-          correct_answer: type === 'multiple_choice'
-            ? card.querySelector('[data-correct-answer]').value
-            : null,
-          expected_answer: type === 'multiple_choice' ? null : expectedAnswer,
-          accepted_alternatives: acceptedAlternatives,
-          keywords,
-          required_concepts: requiredConcepts,
-          justification: card.querySelector('[data-justification]').value.trim() || null,
-        };
-      });
-
-      for (const [index, question] of questions.entries()) {
-        if (question.type === 'multiple_choice' && !question.correct_answer) {
-          showWorkspaceMessage(`Confira e selecione o gabarito da questão ${index + 1}.`, true);
-          return;
-        }
-        if (question.type !== 'multiple_choice'
-          && !question.expected_answer
-          && question.keywords.length === 0
-          && question.required_concepts.length === 0) {
-          showWorkspaceMessage(`Preencha o gabarito da questão ${index + 1}.`, true);
-          return;
-        }
-      }
-
-      const examData = Object.fromEntries(new FormData(form).entries());
-      examData.class_id = classSelect.value;
-      examData.total_score = totalScore.value;
-      examData.duration_minutes = Number(examData.duration_minutes);
-      examData.print_config = {
-        page_size: form.querySelector('#exam-paper-size').value,
-        include_student_identification: form.querySelector('#exam-identification').checked,
-        include_qr_code: form.querySelector('#exam-qr-code').checked,
-        include_page_numbers: form.querySelector('#exam-page-numbers').checked,
-      };
-      examData.questions = questions;
-      for (const key of ['description', 'instructions', 'scheduled_date']) {
-        if (!examData[key]) examData[key] = null;
-      }
-
+      const examData = collectExamData();
+      if (!examData) return;
+      const questions = examData.questions;
       UI.setLoading(saveButton, true);
       try {
         savedExam = await api.create('/exams/complete', examData);
@@ -1148,13 +1362,15 @@ async function loadCreateExamScreen(container) {
           UI.setLoading(saveButton, false);
           return;
         }
+        // Auto-publica após salvar (para provas não importadas de PDF)
         form.querySelectorAll('input, select, textarea, button').forEach(element => {
           if (element.id !== 'save-exam') element.disabled = true;
         });
-        saveButton.textContent = 'Prova salva. Publicar para correção por IA';
+        saveButton.textContent = 'Publicando...';
         showWorkspaceMessage(
           `Prova salva com ${questions.length} questão(ões) e gabaritos. Publicando versão para impressão e correção.`,
         );
+        // Continua para o bloco de publicação abaixo
       } catch (error) {
         showWorkspaceMessage(error.message || 'Não foi possível salvar a prova e os gabaritos.', true);
         UI.setLoading(saveButton, false);
@@ -1162,6 +1378,7 @@ async function loadCreateExamScreen(container) {
       }
     }
 
+    // Publica a prova (tanto para auto-publicação quanto para re-tentativa)
     try {
       UI.setLoading(saveButton, true);
       examVersion = await api.create(`/exams/${savedExam.id}/publish`, {});
@@ -1236,7 +1453,7 @@ async function loadUploadExamsScreen(container) {
 
     try {
       const result = await api.request(
-        `/students?class_id=${encodeURIComponent(selectedVersion.class_id)}&page=1&page_size=100`,
+        `/users/students?class_id=${encodeURIComponent(selectedVersion.class_id)}&page=1&page_size=100`,
       );
       students = normalizeRows(result).filter(student => student.status === 'active');
       setOptions(
@@ -1347,6 +1564,149 @@ async function loadUploadExamsScreen(container) {
   }
 }
 
+async function loadPrintExamsScreen(container) {
+  if (!State.hasRole('admin', 'teacher')) {
+    window.location.replace(Auth.dashboardPath());
+    return;
+  }
+
+  const form = document.createElement('form');
+  form.className = 'workspace-form';
+  form.innerHTML = `
+    <div class="form-group">
+      <label class="form-label" for="print-exam-version">Prova publicada</label>
+      <select class="form-input" id="print-exam-version" name="version_id" required>
+        <option value="">Carregando provas publicadas...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="print-exam-count">Quantidade de cópias</label>
+      <input class="form-input" id="print-exam-count" name="count" type="number" min="1" max="500" step="1" value="1" required>
+    </div>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" type="submit">Gerar cópias em PDF</button>
+    </div>
+  `;
+
+  const message = document.createElement('div');
+  message.className = 'workspace-message';
+  message.hidden = true;
+
+  const resultList = document.createElement('div');
+  resultList.className = 'workspace-table-wrap';
+  container.replaceChildren(form, message, resultList);
+
+  const showMessage = (text, isError = false) => {
+    message.textContent = text;
+    message.hidden = false;
+    message.classList.toggle('workspace-error', isError);
+  };
+
+  const versionSelect = form.elements.version_id;
+  const countInput = form.elements.count;
+  const submitButton = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+
+    const versionId = versionSelect.value;
+    const quantity = Number(countInput.value);
+    if (!versionId) {
+      showMessage('Selecione uma prova publicada antes de gerar cópias.', true);
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
+      showMessage('Informe uma quantidade válida entre 1 e 500 cópias.', true);
+      return;
+    }
+
+    const selectedVersion = versions.find(item => item.version_id === versionId);
+    if (!selectedVersion) {
+      showMessage('Essa versão da prova não está disponível para impressão.', true);
+      return;
+    }
+
+    UI.setLoading(submitButton, true);
+    try {
+      showMessage('Gerando as cópias da prova...');
+      const copies = await api.request(`/exams/versions/${encodeURIComponent(versionId)}/copies?count=${quantity}`, {
+        method: 'POST',
+        body: {},
+      });
+
+      if (!Array.isArray(copies) || copies.length === 0) {
+        throw new Error('Não foi possível gerar as cópias da prova.');
+      }
+
+      resultList.replaceChildren();
+      const list = document.createElement('div');
+      list.className = 'workspace-print-list';
+
+      const teacherPdfButton = document.createElement('button');
+      teacherPdfButton.type = 'button';
+      teacherPdfButton.className = 'btn btn-secondary';
+      teacherPdfButton.textContent = 'Baixar gabarito do professor';
+      teacherPdfButton.addEventListener('click', async () => {
+        await api.download(
+          `/exams/versions/${encodeURIComponent(versionId)}/pdf-teacher`,
+          `gabarito-${selectedVersion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'prova'}.pdf`,
+          { method: 'POST', body: {} },
+        );
+      });
+      list.appendChild(teacherPdfButton);
+
+      for (const copy of copies) {
+        const item = document.createElement('div');
+        item.className = 'workspace-print-item';
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'btn btn-secondary btn-sm';
+        link.textContent = `Baixar ${copy.copy_identifier}.pdf`;
+        link.addEventListener('click', async () => {
+          await api.download(
+            `/exams/copies/${encodeURIComponent(copy.id)}/pdf-student`,
+            `prova-${copy.copy_identifier}.pdf`,
+            { method: 'POST', body: {} },
+          );
+        });
+        item.appendChild(link);
+        list.appendChild(item);
+      }
+
+      resultList.appendChild(list);
+      showMessage(`Foram geradas ${copies.length} cópia(s) da prova ${selectedVersion.title}.`);
+    } catch (error) {
+      showMessage(error.message || 'Não foi possível gerar as cópias da prova.', true);
+    } finally {
+      UI.setLoading(submitButton, false);
+    }
+  });
+
+  let versions = [];
+  try {
+    versions = await api.request('/exams/versions/active');
+    versionSelect.replaceChildren();
+    if (!versions.length) {
+      versionSelect.disabled = true;
+      countInput.disabled = true;
+      submitButton.disabled = true;
+      showMessage('Ainda não há provas publicadas para impressão. Publique uma prova antes de gerar cópias.', true);
+      return;
+    }
+
+    for (const version of versions) {
+      const option = document.createElement('option');
+      option.value = version.version_id;
+      option.textContent = `${version.title} — ${version.class_name} / ${version.subject_name} (v${version.version_number})`;
+      versionSelect.appendChild(option);
+    }
+    versionSelect.value = versions[0].version_id;
+  } catch (error) {
+    form.remove();
+    showWorkspaceMessage(error.message || 'Não foi possível carregar as provas publicadas.', true);
+  }
+}
+
 async function loadWorkspaceScreen() {
   const screen = WORKSPACE_SCREENS[window.location.pathname];
   const title = document.getElementById('workspace-title');
@@ -1404,6 +1764,22 @@ async function loadWorkspaceScreen() {
     return;
   }
 
+  if (screen.editExam) {
+    const examId = new URLSearchParams(window.location.search).get('id');
+    if (!examId) {
+      showWorkspaceMessage('Selecione uma prova para editar.', true);
+      content.replaceChildren();
+      return;
+    }
+    await loadCreateExamScreen(content, examId);
+    return;
+  }
+
+  if (screen.printExams) {
+    await loadPrintExamsScreen(content);
+    return;
+  }
+
   if (screen.uploadExams) {
     await loadUploadExamsScreen(content);
     return;
@@ -1437,7 +1813,11 @@ async function loadWorkspaceScreen() {
       }
       const sectionContent = document.createElement('div');
       sectionContent.className = 'workspace-table-wrap';
-      renderWorkspaceTable(sectionContent, normalizeRows(result.data));
+      if (screen.examList) {
+        renderExamList(sectionContent, normalizeRows(result.data));
+      } else {
+        renderWorkspaceTable(sectionContent, normalizeRows(result.data));
+      }
       content.appendChild(sectionContent);
     }
   } catch (error) {

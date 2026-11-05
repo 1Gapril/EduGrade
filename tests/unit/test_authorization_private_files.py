@@ -23,7 +23,7 @@ from backend.app.models.exam import (
     QuestionType,
     SubmissionStatus,
 )
-from backend.app.models.user import Student, User, UserRole
+from backend.app.models.user import Student, Teacher, User, UserRole
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def authorization_api():
         full_name="DADO_DE_TESTE_EDUGRADE Admin",
         role=UserRole.ADMIN,
     )
-    teacher = User(
+    teacher_user = User(
         id=uuid4(),
         email="DADO_DE_TESTE_EDUGRADE.teacher@example.test",
         username="DADO_DE_TESTE_EDUGRADE_teacher",
@@ -53,6 +53,7 @@ def authorization_api():
         full_name="DADO_DE_TESTE_EDUGRADE Teacher",
         role=UserRole.TEACHER,
     )
+    teacher = Teacher(id=uuid4(), user=teacher_user, employee_id="DADO_DE_TESTE_EDUGRADE-TEACH-001")
     student_user = User(
         id=uuid4(),
         email="DADO_DE_TESTE_EDUGRADE.student@example.test",
@@ -88,6 +89,7 @@ def authorization_api():
         academic_period=period,
         semester=1,
         year=2026,
+        teacher=teacher,
     )
     exam = Exam(
         title="DADO_DE_TESTE_EDUGRADE Exam",
@@ -147,6 +149,7 @@ def authorization_api():
     db.add_all(
         [
             admin,
+            teacher_user,
             teacher,
             student_user,
             other_student_user,
@@ -186,6 +189,7 @@ def authorization_api():
         "client": client,
         "actor": actor,
         "admin": admin,
+        "teacher_user": teacher_user,
         "teacher": teacher,
         "student": student,
         "other_student": other_student,
@@ -214,7 +218,7 @@ def test_teachers_can_list_active_published_versions_and_create_unique_upload_co
 
     assert client.get("/api/v1/exams/versions/active").status_code == 403
 
-    actor[0] = authorization_api["teacher"]
+    actor[0] = authorization_api["teacher_user"]
     listed = client.get("/api/v1/exams/versions/active")
 
     assert listed.status_code == 200
@@ -286,7 +290,7 @@ def test_students_do_not_receive_answer_keys_but_staff_can(authorization_api):
     assert "answer_key" not in student_question.json()
     assert "DADO_DE_TESTE_EDUGRADE answer" not in student_question.text
 
-    for role in ("teacher", "admin"):
+    for role in ("teacher_user", "admin"):
         authorization_api["actor"][0] = authorization_api[role]
         staff_question = client.get(f"/api/v1/exams/questions/{question_id}")
         assert staff_question.status_code == 200

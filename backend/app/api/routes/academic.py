@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user, require_admin, require_teacher_or_admin
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.academic import (
     CourseCreate, CourseUpdate, CourseResponse, CourseWithRelations,
     SubjectCreate, SubjectUpdate, SubjectResponse,
@@ -163,6 +163,27 @@ def list_classes(
         classes = service.get_by_teacher(teacher_id)
     else:
         classes = service.repo.get_all(skip=params.offset, limit=params.limit)
+    total = len(classes)
+    return PaginatedResponse(
+        items=classes, total=total, page=params.page, page_size=params.page_size,
+        total_pages=(total + params.page_size - 1) // params.page_size,
+        has_next=params.page * params.page_size < total, has_prev=params.page > 1,
+    )
+
+
+@router.get("/classes/my", response_model=PaginatedResponse[ClassWithRelations])
+def list_my_classes(
+    params: PaginationParams = Depends(),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Lista turmas do professor autenticado."""
+    if current_user.role != UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="Apenas professores podem acessar esta rota")
+    if not current_user.teacher_profile:
+        raise HTTPException(status_code=403, detail="Perfil de professor não encontrado")
+    service = ClassService(db)
+    classes = service.get_by_teacher(current_user.teacher_profile.id)
     total = len(classes)
     return PaginatedResponse(
         items=classes, total=total, page=params.page, page_size=params.page_size,
