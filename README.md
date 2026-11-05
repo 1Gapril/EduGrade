@@ -63,11 +63,10 @@
 
   👥 Integrantes da Equipe
 
-  - Gabriel Ferreira — RA 325140970 (GitHub, Versionamento, Documentação,
-    DevOps e Apresentação)
-  - Fernando — [Adicione o sobrenome e RA] — (Desenvolvimento Backend,
-    Frontend e Testes)
-  - [Adicione os outros integrantes do grupo aqui, se houver]
+- Gabriel Ferreira — RA 325140970 — (GitHub, Versionamento, Documentação, DevOps e Apresentação)
+- Fernando Almeida — RA 326132695 — (Desenvolvimento Backend, Frontend e Testes)
+- Lucas Henrique — RA 325131396 — (QA, Testes, Validação Funcional e Documentação Técnica)
+- Caio Durães — RA 325132875 — (IA/OCR, Modelos de Linguagem, Correção Assistida e Integrações)
 
   ---
    📚 Documentação Adicional
