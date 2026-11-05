@@ -61,15 +61,23 @@
   - Gerar relatório HTML de cobertura:
   pytest --cov=backend backend/tests/ --cov-report=html
 
-  👥 Integrantes da Equipe
+## 👥 Integrantes da Equipe
 
-  - Gabriel Ferreira — RA 325140970 (GitHub, Versionamento, Documentação,
-    DevOps e Apresentação)
-  - Fernando — [Adicione o sobrenome e RA] — (Desenvolvimento Backend,
-    Frontend e Testes)
-  - [Adicione os outros integrantes do grupo aqui, se houver]
+- **Gabriel Ferreira** — RA 325140970
+  *(GitHub, Versionamento, Documentação, DevOps e Apresentação)*
 
-  ---
+- **Fernando Almeida** — RA 326132695
+  *(Desenvolvimento Backend, Frontend e Testes)*
+
+- **Lucas Henrique** — RA 325131396
+  *(QA, Testes, Validação Funcional e Documentação Técnica)*
+
+- **Caio Duraes** — RA 325132875
+  *(IA/OCR, Modelos de Linguagem, Correção Assistida e Integrações)*
+
+5. Commit directly to the main branch → Commit changes
+
+---
    📚 Documentação Adicional
 
   ┌───────────────────────────────────────────┬───────────────────────────┐
