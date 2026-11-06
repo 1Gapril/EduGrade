@@ -40,6 +40,7 @@ backend/migrations/versions/*.py
 # OS
 .DS_Store
 Thumbs.db
+.dsh-acl-recovery/
 
 # Logs
 logs/
