@@ -1,17 +1,25 @@
 """Repository do Módulo Acadêmico."""
 
-from typing import Optional, List
-from uuid import UUID
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.models.academic import (
-    Course, Subject, Class, AcademicPeriod, AcademicPeriodStatus,
-    Enrollment, EnrollmentStatus, TeacherSubject,
-    Assessment, AssessmentType, Grade, Attendance, AcademicRule
+    AcademicPeriod,
+    AcademicPeriodStatus,
+    AcademicRule,
+    Assessment,
+    Attendance,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Grade,
+    Subject,
+    TeacherSubject,
 )
 from backend.app.repositories.base import BaseRepository
 
@@ -22,11 +30,11 @@ class CourseRepository(BaseRepository[Course]):
     def __init__(self, db: Session):
         super().__init__(Course, db)
 
-    def get_by_code(self, code: str) -> Optional[Course]:
+    def get_by_code(self, code: str) -> Course | None:
         """Busca por código."""
         return self.get_by_field("code", code)
 
-    def get_active(self) -> List[Course]:
+    def get_active(self) -> list[Course]:
         """Lista cursos ativos."""
         return self.get_all(filters={"is_active": True})
 
@@ -37,11 +45,11 @@ class SubjectRepository(BaseRepository[Subject]):
     def __init__(self, db: Session):
         super().__init__(Subject, db)
 
-    def get_by_code(self, code: str) -> Optional[Subject]:
+    def get_by_code(self, code: str) -> Subject | None:
         """Busca por código."""
         return self.get_by_field("code", code)
 
-    def get_by_course(self, course_id: UUID, active_only: bool = True) -> List[Subject]:
+    def get_by_course(self, course_id: UUID, active_only: bool = True) -> list[Subject]:
         """Busca disciplinas de um curso."""
         filters = {"course_id": course_id}
         if active_only:
@@ -55,11 +63,11 @@ class ClassRepository(BaseRepository[Class]):
     def __init__(self, db: Session):
         super().__init__(Class, db)
 
-    def get_by_code(self, code: str) -> Optional[Class]:
+    def get_by_code(self, code: str) -> Class | None:
         """Busca por código."""
         return self.get_by_field("code", code)
 
-    def get_by_teacher(self, teacher_id: UUID) -> List[Class]:
+    def get_by_teacher(self, teacher_id: UUID) -> list[Class]:
         """Busca turmas de um professor."""
         return self.get_all(filters={"teacher_id": teacher_id})
 
@@ -68,7 +76,7 @@ class ClassRepository(BaseRepository[Class]):
         course_id: UUID,
         subject_id: UUID,
         academic_period_id: UUID
-    ) -> List[Class]:
+    ) -> list[Class]:
         """Busca turmas por curso, disciplina e período."""
         return self.get_all(filters={
             "course_id": course_id,
@@ -76,7 +84,7 @@ class ClassRepository(BaseRepository[Class]):
             "academic_period_id": academic_period_id,
         })
 
-    def get_with_details(self, class_id: UUID) -> Optional[Class]:
+    def get_with_details(self, class_id: UUID) -> Class | None:
         """Busca turma com relacionamentos carregados."""
         stmt = select(Class).options(
             joinedload(Class.course),
@@ -101,15 +109,15 @@ class AcademicPeriodRepository(BaseRepository[AcademicPeriod]):
     def __init__(self, db: Session):
         super().__init__(AcademicPeriod, db)
 
-    def get_by_code(self, code: str) -> Optional[AcademicPeriod]:
+    def get_by_code(self, code: str) -> AcademicPeriod | None:
         """Busca por código."""
         return self.get_by_field("code", code)
 
-    def get_current(self) -> Optional[AcademicPeriod]:
+    def get_current(self) -> AcademicPeriod | None:
         """Busca período atual."""
         return self.get_by_field("is_current", True)
 
-    def get_active(self) -> List[AcademicPeriod]:
+    def get_active(self) -> list[AcademicPeriod]:
         """Lista períodos ativos."""
         return self.get_all(filters={"status": AcademicPeriodStatus.ACTIVE})
 
@@ -120,21 +128,21 @@ class EnrollmentRepository(BaseRepository[Enrollment]):
     def __init__(self, db: Session):
         super().__init__(Enrollment, db)
 
-    def get_by_student_class(self, student_id: UUID, class_id: UUID) -> Optional[Enrollment]:
+    def get_by_student_class(self, student_id: UUID, class_id: UUID) -> Enrollment | None:
         """Busca matrícula de aluno em turma."""
         stmt = select(Enrollment).where(
             and_(Enrollment.student_id == student_id, Enrollment.class_id == class_id)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_student_period(self, student_id: UUID, academic_period_id: UUID) -> List[Enrollment]:
+    def get_by_student_period(self, student_id: UUID, academic_period_id: UUID) -> list[Enrollment]:
         """Busca matrículas de aluno em um período."""
         return self.get_all(filters={
             "student_id": student_id,
             "academic_period_id": academic_period_id,
         })
 
-    def get_by_class(self, class_id: UUID, status: Optional[EnrollmentStatus] = None) -> List[Enrollment]:
+    def get_by_class(self, class_id: UUID, status: EnrollmentStatus | None = None) -> list[Enrollment]:
         """Busca matrículas de uma turma."""
         filters = {"class_id": class_id}
         if status:
@@ -148,14 +156,25 @@ class TeacherSubjectRepository(BaseRepository[TeacherSubject]):
     def __init__(self, db: Session):
         super().__init__(TeacherSubject, db)
 
-    def get_by_teacher_subject(self, teacher_id: UUID, subject_id: UUID) -> Optional[TeacherSubject]:
+    def get_by_teacher_subject(
+        self,
+        teacher_id: UUID,
+        subject_id: UUID,
+        academic_period_id: UUID | None = None,
+    ) -> TeacherSubject | None:
         """Busca associação professor-disciplina."""
-        stmt = select(TeacherSubject).where(
-            and_(TeacherSubject.teacher_id == teacher_id, TeacherSubject.subject_id == subject_id)
-        )
+        conditions = [
+            TeacherSubject.teacher_id == teacher_id,
+            TeacherSubject.subject_id == subject_id,
+        ]
+        if academic_period_id is None:
+            conditions.append(TeacherSubject.academic_period_id.is_(None))
+        else:
+            conditions.append(TeacherSubject.academic_period_id == academic_period_id)
+        stmt = select(TeacherSubject).where(and_(*conditions))
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_teacher(self, teacher_id: UUID) -> List[TeacherSubject]:
+    def get_by_teacher(self, teacher_id: UUID) -> list[TeacherSubject]:
         """Busca associações de um professor."""
         return self.get_all(filters={"teacher_id": teacher_id})
 
@@ -166,11 +185,11 @@ class AssessmentRepository(BaseRepository[Assessment]):
     def __init__(self, db: Session):
         super().__init__(Assessment, db)
 
-    def get_by_class(self, class_id: UUID) -> List[Assessment]:
+    def get_by_class(self, class_id: UUID) -> list[Assessment]:
         """Busca avaliações de uma turma."""
         return self.get_all(filters={"class_id": class_id})
 
-    def get_published(self, class_id: UUID) -> List[Assessment]:
+    def get_published(self, class_id: UUID) -> list[Assessment]:
         """Busca avaliações publicadas de uma turma."""
         return self.get_all(filters={"class_id": class_id, "is_published": True})
 
@@ -181,30 +200,30 @@ class GradeRepository(BaseRepository[Grade]):
     def __init__(self, db: Session):
         super().__init__(Grade, db)
 
-    def get_by_enrollment_assessment(self, enrollment_id: UUID, assessment_id: UUID) -> Optional[Grade]:
+    def get_by_enrollment_assessment(self, enrollment_id: UUID, assessment_id: UUID) -> Grade | None:
         """Busca nota de matrícula em avaliação."""
         stmt = select(Grade).where(
             and_(Grade.enrollment_id == enrollment_id, Grade.assessment_id == assessment_id)
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_enrollment(self, enrollment_id: UUID) -> List[Grade]:
+    def get_by_enrollment(self, enrollment_id: UUID) -> list[Grade]:
         """Busca notas de uma matrícula."""
         return self.get_all(filters={"enrollment_id": enrollment_id})
 
-    def get_official_by_enrollment(self, enrollment_id: UUID) -> List[Grade]:
+    def get_official_by_enrollment(self, enrollment_id: UUID) -> list[Grade]:
         """Busca notas oficiais de uma matrícula."""
         stmt = select(Grade).where(
-            and_(Grade.enrollment_id == enrollment_id, Grade.is_official == True)
+            and_(Grade.enrollment_id == enrollment_id, Grade.is_official.is_(True))
         )
         return list(self.db.execute(stmt).scalars().all())
 
-    def calculate_weighted_average(self, enrollment_id: UUID) -> Optional[Decimal]:
+    def calculate_weighted_average(self, enrollment_id: UUID) -> Decimal | None:
         """Calcula média ponderada do aluno."""
         stmt = select(
             func.sum(Grade.score * Assessment.weight) / func.sum(Assessment.weight)
         ).join(Assessment).where(
-            and_(Grade.enrollment_id == enrollment_id, Grade.is_official == True)
+            and_(Grade.enrollment_id == enrollment_id, Grade.is_official.is_(True))
         )
         result = self.db.execute(stmt).scalar_one_or_none()
         return Decimal(str(result)) if result else None
@@ -216,11 +235,11 @@ class AttendanceRepository(BaseRepository[Attendance]):
     def __init__(self, db: Session):
         super().__init__(Attendance, db)
 
-    def get_by_enrollment(self, enrollment_id: UUID) -> List[Attendance]:
+    def get_by_enrollment(self, enrollment_id: UUID) -> list[Attendance]:
         """Busca frequência de uma matrícula."""
         return self.get_all(filters={"enrollment_id": enrollment_id})
 
-    def get_by_class_date(self, class_id: UUID, class_date: date) -> List[Attendance]:
+    def get_by_class_date(self, class_id: UUID, class_date: date) -> list[Attendance]:
         """Busca frequência de uma turma em uma data."""
         from backend.app.models.academic import Enrollment
         stmt = select(Attendance).join(Enrollment).where(
@@ -232,7 +251,7 @@ class AttendanceRepository(BaseRepository[Attendance]):
         """Calcula porcentagem de frequência."""
         total_stmt = select(func.count(Attendance.id)).where(Attendance.enrollment_id == enrollment_id)
         present_stmt = select(func.count(Attendance.id)).where(
-            and_(Attendance.enrollment_id == enrollment_id, Attendance.is_present == True)
+            and_(Attendance.enrollment_id == enrollment_id, Attendance.is_present.is_(True))
         )
         total = self.db.execute(total_stmt).scalar_one()
         present = self.db.execute(present_stmt).scalar_one()
@@ -247,14 +266,14 @@ class AcademicRuleRepository(BaseRepository[AcademicRule]):
     def __init__(self, db: Session):
         super().__init__(AcademicRule, db)
 
-    def get_by_name(self, name: str) -> Optional[AcademicRule]:
+    def get_by_name(self, name: str) -> AcademicRule | None:
         """Busca por nome."""
         return self.get_by_field("name", name)
 
-    def get_by_type(self, rule_type: str) -> List[AcademicRule]:
+    def get_by_type(self, rule_type: str) -> list[AcademicRule]:
         """Busca por tipo."""
         return self.get_all(filters={"rule_type": rule_type, "is_active": True})
 
 
 # Import para evitar circular
-from backend.app.models.user import Teacher
+from backend.app.models.user import Teacher  # noqa: E402

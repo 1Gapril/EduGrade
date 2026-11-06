@@ -1,80 +1,81 @@
 """Models package initialization."""
 
 # User models
-from backend.app.models.user import (
-    User,
-    UserRole,
-    Student,
-    Teacher,
-    Administrator,
-)
-from backend.app.models.access_request import AccessRequest, AccessRequestStatus
-from backend.app.models.material import StudyMaterial
-from backend.app.models.admin_settings import AIProviderConfig, AdminSetting
-
 # Academic models
 from backend.app.models.academic import (
-    Course,
-    Subject,
-    Class,
+    AcademicAssignment,
     AcademicPeriod,
     AcademicPeriodStatus,
-    Enrollment,
-    EnrollmentStatus,
-    TeacherSubject,
+    AcademicRule,
     Assessment,
     AssessmentType,
-    Grade,
     Attendance,
-    AcademicRule,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Grade,
+    Subject,
+    TeacherSubject,
 )
-
-# Exam models
-from backend.app.models.exam import (
-    Exam,
-    ExamStatus,
-    ExamVersion,
-    ExamQuestion,
-    QuestionType,
-    AnswerKey,
-    GradingRubric,
-    ExamCopy,
-    ExamPrintLog,
-    PrintStatus,
-    ExamSubmission,
-    SubmissionStatus,
-    SubmissionPage,
-    ExtractedAnswer,
-)
+from backend.app.models.access_request import AccessRequest, AccessRequestStatus
+from backend.app.models.admin_settings import AdminSetting, AIProviderConfig
 
 # AI Correction models
 from backend.app.models.ai_correction import (
     AICorrection,
     AICorrectionStatus,
+    CorrectionAuditLog,
     CorrectionReview,
     ReviewStatus,
-    CorrectionAuditLog,
 )
 
 # Audit models
 from backend.app.models.audit import (
-    AuditLog,
     AuditActionType,
+    AuditLog,
     SystemLog,
+)
+
+# Exam models
+from backend.app.models.exam import (
+    AnswerKey,
+    Exam,
+    ExamCopy,
+    ExamPrintLog,
+    ExamQuestion,
+    ExamStatus,
+    ExamSubmission,
+    ExamVersion,
+    ExtractedAnswer,
+    GradingRubric,
+    PrintStatus,
+    QuestionType,
+    SubmissionPage,
+    SubmissionStatus,
 )
 
 # Grading Batch models (ADENDO OFICIAL)
 from backend.app.models.grading_batch import (
-    GradingBatch,
     BatchStatus,
-    GradingBatchFile,
-    FileStatus,
-    ExamSubmissionPage,
-    StudentIdentificationResult,
-    IdentificationStatus,
     ExamPageGroup,
-    PageGroupStatus,
+    ExamSubmissionPage,
+    FileStatus,
     GradingAuditLog,
+    GradingBatch,
+    GradingBatchFile,
+    IdentificationStatus,
+    PageGroupStatus,
+    StudentIdentificationResult,
+)
+from backend.app.models.material import StudyMaterial
+from backend.app.models.quality_run import QualityRun
+from backend.app.models.user import (
+    Administrator,
+    Student,
+    Teacher,
+    User,
+    UserRole,
 )
 
 __all__ = [
@@ -89,11 +90,13 @@ __all__ = [
     "StudyMaterial",
     "AIProviderConfig",
     "AdminSetting",
+    "QualityRun",
     # Academic
     "Course",
     "Subject",
     "Class",
     "AcademicPeriod",
+    "AcademicAssignment",
     "AcademicPeriodStatus",
     "Enrollment",
     "EnrollmentStatus",

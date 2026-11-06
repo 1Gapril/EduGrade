@@ -1,41 +1,45 @@
 """EduGrade - FastAPI Application Entry Point."""
 
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-
-# Garante que a raiz do projeto esteja no sys.path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.core.config import settings
-from backend.app.core.database import init_db, SessionLocal
-from backend.app.core.seed import seed_database
-from backend.app.api.routes import (
-    access_requests,
-    auth,
-    users,
+# Garante que a raiz do projeto esteja no sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.app.api.routes import (  # noqa: E402
     academic,
-    exams,
+    access_requests,
+    admin_settings,
     ai_correction,
     audit,
+    auth,
     batch_grading,
+    exams,
     materials,
-    admin_settings,
+    quality,
+    users,
 )
-from backend.app.core.exceptions import (
-    EduGradeException, ValidationError, NotFoundError,
-    ConflictError, AuthenticationError, AuthorizationError,
-    ExternalServiceError, BusinessRuleError, FileProcessingError
+from backend.app.core.config import settings  # noqa: E402
+from backend.app.core.database import SessionLocal, init_db  # noqa: E402
+from backend.app.core.exceptions import (  # noqa: E402
+    AuthenticationError,
+    AuthorizationError,
+    BusinessRuleError,
+    ConflictError,
+    EduGradeException,
+    ExternalServiceError,
+    NotFoundError,
 )
+from backend.app.core.seed import seed_database  # noqa: E402
 
 # Garantir existência dos diretórios do sistema
 STORAGE_DIR = PROJECT_ROOT / "storage"
@@ -76,7 +80,7 @@ async def lifespan(app: FastAPI):
     try:
         init_db()
         logger.info("Banco de dados inicializado.")
-        
+
         # Popula dados de demonstração se banco estiver vazio
         db = SessionLocal()
         try:
@@ -177,6 +181,7 @@ app.include_router(audit.router, prefix="/api/v1")
 app.include_router(batch_grading.router, prefix="/api/v1")
 app.include_router(materials.router, prefix="/api/v1")
 app.include_router(admin_settings.router, prefix="/api/v1")
+app.include_router(quality.router, prefix="/api/v1")
 
 # Frontend estático
 if FRONTEND_DIR.is_dir():

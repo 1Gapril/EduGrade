@@ -37,13 +37,13 @@ class ConfiguredAIProvider:
         )
 
     def _headers(self) -> dict[str, str]:
+        if self.provider_type == "anthropic":
+            headers = {"anthropic-version": "2023-06-01"}
+            if self.api_key:
+                headers["x-api-key"] = self.api_key
+            return headers
         if not self.api_key:
             return {}
-        if self.provider_type == "anthropic":
-            return {
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-            }
         if self.provider_type == "google_gemini":
             return {"x-goog-api-key": self.api_key}
         return {"Authorization": f"Bearer {self.api_key}"}

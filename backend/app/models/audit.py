@@ -2,16 +2,20 @@
 
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+if TYPE_CHECKING:
+    from backend.app.models.user import User
+
 from sqlalchemy import (
+    JSON,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     String,
     Text,
-    JSON,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship

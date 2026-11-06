@@ -1,31 +1,30 @@
 """Rotas de Auditoria e Logs."""
 
-from typing import Optional, List
 from uuid import UUID
-from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
-from backend.app.core.security import get_current_active_user, require_admin
-from backend.app.models.user import User
+from backend.app.core.security import require_admin
 from backend.app.models.audit import AuditActionType
-from backend.app.services.audit_service import AuditService, SystemLogService
-from backend.app.schemas.common import PaginationParams, PaginatedResponse
+from backend.app.models.user import User
 from backend.app.schemas.ai_correction import CorrectionAuditLogResponse
+from backend.app.schemas.audit import AuditLogResponse
+from backend.app.schemas.common import PaginatedResponse, PaginationParams
+from backend.app.services.audit_service import AuditService, SystemLogService
 
 router = APIRouter(prefix="/audit", tags=["Auditoria"])
 
 
 # ==================== Audit Logs ====================
 
-@router.get("", response_model=PaginatedResponse[dict])
+@router.get("", response_model=PaginatedResponse[AuditLogResponse])
 def list_audit_logs(
-    user_id: Optional[UUID] = None,
-    action: Optional[AuditActionType] = None,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[UUID] = None,
+    user_id: UUID | None = None,
+    action: AuditActionType | None = None,
+    entity_type: str | None = None,
+    entity_id: UUID | None = None,
     hours: int = Query(default=24, ge=1, le=168),
     params: PaginationParams = Depends(),
     current_user: User = Depends(require_admin),
@@ -44,7 +43,10 @@ def list_audit_logs(
         return service.get_recent_audit(hours, params)
 
 
-@router.get("/entity/{entity_type}/{entity_id}", response_model=PaginatedResponse[dict])
+@router.get(
+    "/entity/{entity_type}/{entity_id}",
+    response_model=PaginatedResponse[AuditLogResponse],
+)
 def get_entity_audit(
     entity_type: str,
     entity_id: UUID,
@@ -57,7 +59,7 @@ def get_entity_audit(
     return service.get_entity_audit(entity_type, entity_id, params)
 
 
-@router.get("/user/{user_id}", response_model=PaginatedResponse[dict])
+@router.get("/user/{user_id}", response_model=PaginatedResponse[AuditLogResponse])
 def get_user_audit(
     user_id: UUID,
     params: PaginationParams = Depends(),
@@ -69,7 +71,7 @@ def get_user_audit(
     return service.get_user_audit(user_id, params)
 
 
-@router.get("/recent", response_model=PaginatedResponse[dict])
+@router.get("/recent", response_model=PaginatedResponse[AuditLogResponse])
 def get_recent_audit(
     hours: int = Query(default=24, ge=1, le=168),
     params: PaginationParams = Depends(),
@@ -83,7 +85,7 @@ def get_recent_audit(
 
 # ==================== System Logs ====================
 
-@router.get("/system/errors", response_model=List[dict])
+@router.get("/system/errors", response_model=list[dict])
 def get_system_errors(
     hours: int = Query(default=24, ge=1, le=168),
     limit: int = Query(default=100, ge=1, le=500),
@@ -110,7 +112,7 @@ def get_system_errors(
 
 # ==================== Correction Audit ====================
 
-@router.get("/corrections/{review_id}/logs", response_model=List[CorrectionAuditLogResponse])
+@router.get("/corrections/{review_id}/logs", response_model=list[CorrectionAuditLogResponse])
 def get_correction_audit_logs(
     review_id: UUID,
     current_user: User = Depends(require_admin),

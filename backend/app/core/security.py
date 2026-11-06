@@ -1,11 +1,11 @@
 """Segurança: Hash de senhas, JWT, dependências de autenticação."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Annotated
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -33,10 +33,10 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Dados decodificados do token."""
-    sub: Optional[str] = None
-    role: Optional[str] = None
-    user_id: Optional[UUID] = None
-    exp: Optional[datetime] = None
+    sub: str | None = None
+    role: str | None = None
+    user_id: UUID | None = None
+    exp: datetime | None = None
 
 
 class TokenPayload(BaseModel):
@@ -63,10 +63,10 @@ def create_access_token(
     subject: str,
     role: str,
     user_id: UUID,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Cria token de acesso JWT."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if expires_delta:
         expire = now + expires_delta
     else:
@@ -87,10 +87,10 @@ def create_refresh_token(
     subject: str,
     role: str,
     user_id: UUID,
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Cria token de refresh JWT."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if expires_delta:
         expire = now + expires_delta
     else:
@@ -135,8 +135,8 @@ def get_current_user(
         payload = decode_token(token)
         if payload.type != "access":
             raise credentials_exception
-    except (JWTError, ValueError):
-        raise credentials_exception
+    except (JWTError, ValueError) as error:
+        raise credentials_exception from error
 
     user_repo = UserRepository(db)
     user = user_repo.get(UUID(payload.user_id))

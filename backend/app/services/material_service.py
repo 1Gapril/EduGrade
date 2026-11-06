@@ -2,7 +2,6 @@
 
 import mimetypes
 from pathlib import Path
-from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, UploadFile
@@ -57,7 +56,7 @@ class MaterialService:
     def list_for_teacher(
         self,
         user: User,
-        subject_id: Optional[UUID] = None,
+        subject_id: UUID | None = None,
     ) -> list[StudyMaterial]:
         statement = select(StudyMaterial).order_by(StudyMaterial.created_at.desc())
         if user.role != UserRole.ADMIN:
@@ -112,7 +111,7 @@ class MaterialService:
         user: User,
         subject_id: UUID,
         title: str,
-        description: Optional[str],
+        description: str | None,
         upload: UploadFile,
     ) -> StudyMaterial:
         subject = self.db.get(Subject, subject_id)

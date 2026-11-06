@@ -3,12 +3,14 @@ from uuid import uuid4
 
 import pytest
 
-from backend.app.schemas.ai_correction import BatchCorrectionRequest
-from backend.app.core.exceptions import ExternalServiceError
 from backend.app.core.config import settings
+from backend.app.core.exceptions import ExternalServiceError
 from backend.app.integrations.ocr import processor as ocr_processor
+from backend.app.models.grading_batch import IdentificationStatus
+from backend.app.schemas.ai_correction import BatchCorrectionRequest
 from backend.app.services import exam_service
 from backend.app.services.ai_correction_service import AICorrectionService
+from backend.app.services.batch_grading_service import BatchGradingService
 
 
 def test_process_ocr_maps_processor_fields_to_question(monkeypatch):
@@ -128,3 +130,23 @@ def test_ocr_processor_reports_missing_language_data(monkeypatch):
 
     with pytest.raises(ExternalServiceError, match="Modelo de idioma 'por'.*não encontrado"):
         processor._run_ocr(None)
+
+
+def test_identification_with_unregistered_matricula_requires_manual_review():
+    student = SimpleNamespace(id=uuid4())
+    page = SimpleNamespace(
+        id=uuid4(),
+        full_text="RA: 12345678 Matrícula: 87654321",
+    )
+    service = BatchGradingService.__new__(BatchGradingService)
+    service.student_repo = SimpleNamespace(
+        get_by_ra=lambda ra: student if ra == "12345678" else None,
+        get_by_registration_number=lambda _registration_number: None,
+    )
+    service.db = SimpleNamespace(add=lambda _result: None, flush=lambda: None)
+
+    result = service._identify_page(page)
+
+    assert result.status == IdentificationStatus.CONFLICT
+    assert result.matched_student_id is None
+    assert result.conflict_details["registration_number_not_found"] == "87654321"

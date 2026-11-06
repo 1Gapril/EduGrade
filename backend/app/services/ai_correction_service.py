@@ -1,35 +1,44 @@
 """Service de Correção por IA com provedores abstraídos (suporta servidor local http://127.0.0.1:8082/admin)."""
 
-from typing import Optional, List, Dict, Any
-from uuid import UUID
-from datetime import datetime, timezone
-from decimal import Decimal
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID
 
 import httpx
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
+from backend.app.core.exceptions import ExternalServiceError, NotFoundError, ValidationError
+from backend.app.models.academic import EnrollmentStatus
 from backend.app.models.admin_settings import AIProviderConfig
-from backend.app.models.ai_correction import AICorrection, AICorrectionStatus, CorrectionReview, ReviewStatus, CorrectionAuditLog
-from backend.app.models.exam import ExamQuestion, QuestionType, ExamSubmission, SubmissionStatus
+from backend.app.models.ai_correction import (
+    AICorrection,
+    AICorrectionStatus,
+    CorrectionReview,
+    ReviewStatus,
+)
+from backend.app.models.exam import ExamQuestion, ExamSubmission, SubmissionStatus
 from backend.app.repositories.ai_correction_repository import (
-    AICorrectionRepository, CorrectionReviewRepository, CorrectionAuditLogRepository
+    AICorrectionRepository,
+    AuditActionType,
+    AuditLogRepository,
+    CorrectionAuditLogRepository,
+    CorrectionReviewRepository,
 )
 from backend.app.repositories.exam_repository import (
-    ExamQuestionRepository, ExamSubmissionRepository, ExtractedAnswerRepository
+    ExamQuestionRepository,
+    ExamSubmissionRepository,
+    ExtractedAnswerRepository,
 )
 from backend.app.schemas.ai_correction import (
-    CorrectionRequest, CorrectionResponse, BatchCorrectionRequest, BatchCorrectionResponse,
-    AIHealthCheck
+    AIHealthCheck,
+    BatchCorrectionRequest,
+    BatchCorrectionResponse,
 )
-from backend.app.core.config import settings
-from backend.app.core.exceptions import ValidationError, NotFoundError, ExternalServiceError
-from backend.app.repositories.ai_correction_repository import AuditLogRepository, AuditActionType
 from backend.app.services.admin_settings_service import _decrypt_credential
 from backend.app.services.configured_ai_provider import ConfiguredAIProvider
-
 
 # ==================== AI Provider Interface ====================
 
@@ -53,7 +62,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_available_models(self) -> List[str]:
+    async def get_available_models(self) -> list[str]:
         pass
 
 
@@ -62,7 +71,7 @@ class AIProvider(ABC):
 class LocalAIProvider(AIProvider):
     """Provedor para servidor local de IA (ex: Ollama, LM Studio, Text Generation WebUI)."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8082", api_key: Optional[str] = None):
+    def __init__(self, base_url: str = "http://127.0.0.1:8082", api_key: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.client = httpx.AsyncClient(
@@ -105,7 +114,7 @@ class LocalAIProvider(AIProvider):
                 data = response.json()
                 return data.get("response", "")
             except Exception as e:
-                raise ExternalServiceError(f"Erro ao gerar texto: {e}")
+                raise ExternalServiceError(f"Erro ao gerar texto: {e}") from e
 
     async def analyze_image(self, image_base64: str, prompt: str, model: str, **kwargs) -> str:
         """Analisa imagem com modelo multimodal local."""
@@ -130,7 +139,7 @@ class LocalAIProvider(AIProvider):
             data = response.json()
             return data["choices"][0]["message"]["content"]
         except Exception as e:
-            raise ExternalServiceError(f"Erro ao analisar imagem: {e}")
+            raise ExternalServiceError(f"Erro ao analisar imagem: {e}") from e
 
     async def analyze_document(self, file_path: str, prompt: str, model: str, **kwargs) -> str:
         """Analisa documento (PDF) - converte para imagens e analisa."""
@@ -161,7 +170,7 @@ class LocalAIProvider(AIProvider):
             error="Servidor não responde",
         )
 
-    async def get_available_models(self) -> List[str]:
+    async def get_available_models(self) -> list[str]:
         """Lista modelos disponíveis."""
         try:
             # Tenta endpoint OpenAI
@@ -202,7 +211,7 @@ class MockProvider(AIProvider):
     async def health_check(self) -> AIHealthCheck:
         return AIHealthCheck(provider="mock", status="healthy", model="mock", latency_ms=1)
 
-    async def get_available_models(self) -> List[str]:
+    async def get_available_models(self) -> list[str]:
         return ["mock-model"]
 
 
@@ -211,11 +220,27 @@ class MockProvider(AIProvider):
 class AIProviderFactory:
     """Factory para criar provedores de IA."""
 
-    _providers: Dict[str, AIProvider] = {}
+    _providers: dict[str, AIProvider] = {}
 
     @classmethod
     def get_provider(cls, provider_type: str = None, db: Session = None) -> AIProvider:
-        if db is not None and provider_type is None:
+        use_admin_default = db is not None and provider_type is None
+        provider_type = provider_type or settings.ai_provider
+
+        if provider_type == "fcc_claude":
+            if provider_type not in cls._providers:
+                cls._providers[provider_type] = ConfiguredAIProvider(
+                    provider_id=provider_type,
+                    provider_type="anthropic",
+                    base_url=settings.fcc_base_url,
+                    api_key=None,
+                    model=settings.fcc_model,
+                    vision_model=settings.fcc_model,
+                    timeout_seconds=settings.ai_timeout_seconds,
+                )
+            return cls._providers[provider_type]
+
+        if use_admin_default:
             configured = db.execute(
                 select(AIProviderConfig).where(
                     AIProviderConfig.is_default.is_(True),
@@ -253,13 +278,10 @@ class AIProviderFactory:
                     )
                 return cls._providers[cache_key]
 
-        provider_type = provider_type or settings.ai_provider
-
         if provider_type in {"openai", "anthropic"}:
             raise ExternalServiceError(
                 f"O provedor de IA '{provider_type}' está configurado, mas ainda não é suportado."
             )
-
         if provider_type in cls._providers:
             return cls._providers[provider_type]
 
@@ -268,13 +290,12 @@ class AIProviderFactory:
         elif provider_type == "local":
             provider = LocalAIProvider(
                 base_url=settings.ollama_base_url,
-                api_key=None,  # Servidor local geralmente não precisa de API key
+                api_key=None,
             )
         elif provider_type == "ollama":
             provider = LocalAIProvider(base_url=settings.ollama_base_url)
         else:
-            # Default para mock
-            provider = MockProvider()
+            raise ExternalServiceError(f"O provedor de IA '{provider_type}' não é reconhecido.")
 
         cls._providers[provider_type] = provider
         return provider
@@ -303,8 +324,8 @@ class AICorrectionService:
         self.answer_repo = ExtractedAnswerRepository(db)
         self.provider = AIProviderFactory.get_provider(db=db)
 
-    def _build_correction_prompt(self, question: ExamQuestion, answer_key: Dict, rubric: Dict,
-                                  student_answer: str, student_answer_image: Optional[str] = None) -> str:
+    def _build_correction_prompt(self, question: ExamQuestion, answer_key: dict, rubric: dict,
+                                  student_answer: str, student_answer_image: str | None = None) -> str:
         """Constrói prompt para correção."""
         q_type = question.type.value
 
@@ -369,7 +390,7 @@ RETORNE APENAS JSON VÁLIDO com:
 
         return base_prompt
 
-    def _format_rubric(self, rubric: Dict) -> str:
+    def _format_rubric(self, rubric: dict) -> str:
         """Formata rubrica para prompt."""
         criteria = rubric.get("criteria", [])
         if not criteria:
@@ -478,7 +499,7 @@ RETORNE APENAS JSON VÁLIDO com:
             correction.evaluation_confidence = Decimal(str(result.get("evaluation_confidence", 0)))
             correction.requires_review = result.get("requires_review", False)
             correction.review_reason = result.get("review_reason")
-            correction.completed_at = datetime.now(timezone.utc)
+            correction.completed_at = datetime.now(UTC)
 
             if correction.requires_review or (correction.evaluation_confidence and correction.evaluation_confidence < 70):
                 correction.status = AICorrectionStatus.REQUIRES_REVIEW
@@ -498,7 +519,7 @@ RETORNE APENAS JSON VÁLIDO com:
             correction.status = AICorrectionStatus.FAILED
             correction.error_message = str(e)
             self.db.flush()
-            raise ExternalServiceError(f"Falha na correção por IA: {e}")
+            raise ExternalServiceError(f"Falha na correção por IA: {e}") from e
 
     async def batch_correct(self, request: BatchCorrectionRequest) -> BatchCorrectionResponse:
         """Correção em lote."""
@@ -559,7 +580,7 @@ RETORNE APENAS JSON VÁLIDO com:
             reviewed_by=reviewer_id,
             status=ReviewStatus.IN_REVIEW,
             original_suggested_score=correction.suggested_score,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         self.db.add(review)
         self.db.flush()
@@ -569,9 +590,9 @@ RETORNE APENAS JSON VÁLIDO com:
                                   "CorrectionReview", review.id)
         return review
 
-    def update_review(self, review_id: UUID, final_score: Decimal, corrected_text: Optional[str] = None,
-                     reviewer_justification: Optional[str] = None, reviewer_notes: Optional[str] = None,
-                     criteria_overrides: Optional[Dict] = None, reviewer_id: UUID = None) -> CorrectionReview:
+    def update_review(self, review_id: UUID, final_score: Decimal, corrected_text: str | None = None,
+                     reviewer_justification: str | None = None, reviewer_notes: str | None = None,
+                     criteria_overrides: dict | None = None, reviewer_id: UUID = None) -> CorrectionReview:
         """Atualiza revisão com decisão do professor."""
         review = self.review_repo.get(review_id)
         if not review:
@@ -597,11 +618,10 @@ RETORNE APENAS JSON VÁLIDO com:
         review.reviewer_justification = reviewer_justification
         review.reviewer_notes = reviewer_notes
         review.criteria_overrides = criteria_overrides or {}
-        review.completed_at = datetime.now(timezone.utc)
+        review.completed_at = datetime.now(UTC)
 
         # Atualiza status da submissão
         submission = self.submission_repo.get(correction.submission_id)
-        all_reviews = self.review_repo.get_pending()
         submission_corrections = self.correction_repo.get_by_submission(submission.id)
         all_reviewed = all(
             self.review_repo.get_by_ai_correction(c.id) and
@@ -633,26 +653,65 @@ RETORNE APENAS JSON VÁLIDO com:
             if review.final_score is None:
                 raise ValidationError(f"Questão {correction.question_id} sem nota final")
 
-        # Cria/atualiza notas oficiais
+        if not corrections:
+            raise ValidationError("A submissão não possui correções revisadas")
+        if not submission.identified_student_id:
+            raise ValidationError("A identidade do aluno precisa ser confirmada antes da publicação")
+
+        exam = getattr(getattr(submission, "version", None), "exam", None)
+        if exam is None:
+            raise ValidationError("A prova da submissão não está disponível")
         from backend.app.services.academic_service import GradeService
         grade_service = GradeService(self.db)
+        from backend.app.repositories.academic_repository import (
+            AssessmentRepository,
+            EnrollmentRepository,
+        )
 
-        for correction in corrections:
-            review = self.review_repo.get_by_ai_correction(correction.id)
-            # Busca enrollment do aluno
-            from backend.app.repositories.academic_repository import EnrollmentRepository
-            enrollment_repo = EnrollmentRepository(self.db)
-            enrollment = enrollment_repo.get_by_student_class(
-                submission.identified_student_id,
-                submission.version.exam.class_id
+        enrollment = EnrollmentRepository(self.db).get_by_student_class(
+            submission.identified_student_id,
+            exam.class_id,
+        )
+        if not enrollment or enrollment.status != EnrollmentStatus.ACTIVE:
+            raise ValidationError("O aluno não possui matrícula ativa na turma da prova")
+
+        matching_assessments = [
+            assessment
+            for assessment in AssessmentRepository(self.db).get_by_class(exam.class_id)
+            if assessment.title == exam.title
+            and assessment.subject_id == exam.subject_id
+            and assessment.academic_period_id == exam.academic_period_id
+        ]
+        if len(matching_assessments) != 1:
+            raise ValidationError(
+                "É necessário existir exatamente uma avaliação com o mesmo título, disciplina "
+                "e período para publicar a nota"
             )
-            if enrollment:
-                # Busca assessment correspondente
-                from backend.app.repositories.academic_repository import AssessmentRepository
-                assessment_repo = AssessmentRepository(self.db)
-                assessments = assessment_repo.get_by_class(enrollment.class_id)
-                # Match por questão... (simplificado)
-                pass
+        assessment = matching_assessments[0]
+        final_score = sum(
+            (review.final_score for correction in corrections
+             if (review := self.review_repo.get_by_ai_correction(correction.id)) is not None),
+            Decimal("0"),
+        )
+        if final_score > assessment.max_score:
+            raise ValidationError("A nota final excede a pontuação máxima da avaliação")
+
+        grade = grade_service.repo.get_by_enrollment_assessment(enrollment.id, assessment.id)
+        if grade:
+            grade.score = final_score
+            self.db.flush()
+        else:
+            from backend.app.schemas.academic import GradeCreate
+
+            grade = grade_service.create(
+                GradeCreate(
+                    enrollment_id=enrollment.id,
+                    assessment_id=assessment.id,
+                    score=final_score,
+                ),
+                published_by,
+            )
+        grade_service.publish(grade.id, published_by)
 
         submission.status = SubmissionStatus.PUBLISHED
         self.db.flush()

@@ -1,0 +1,20 @@
+
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p reports
+          python -m pytest tests/unit \
+            --cov=backend.app \
+            --cov-report=term-missing \
+            --cov-report=xml:reports/coverage.xml \
+            --junitxml=reports/junit.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            reports/coverage.xml
+            reports/junit.xml
+          retention-days: 7

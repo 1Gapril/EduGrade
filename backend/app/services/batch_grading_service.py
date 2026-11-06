@@ -1,29 +1,39 @@
 """Service de Processamento em Lote (Batch Grading) - ADENDO OFICIAL."""
 
-from typing import Optional, List, Dict, Any
-from uuid import UUID
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
+from backend.app.core.exceptions import NotFoundError, ValidationError
+from backend.app.integrations.ocr.processor import OCRProcessor
+from backend.app.models.academic import Enrollment, EnrollmentStatus
+from backend.app.models.exam import Exam, ExamSubmission, SubmissionStatus
 from backend.app.models.grading_batch import (
-    GradingBatch, BatchStatus, GradingBatchFile, FileStatus,
-    ExamSubmissionPage, StudentIdentificationResult, IdentificationStatus,
-    ExamPageGroup, PageGroupStatus, GradingAuditLog,
+    BatchStatus,
+    ExamPageGroup,
+    ExamSubmissionPage,
+    FileStatus,
+    GradingAuditLog,
+    GradingBatch,
+    GradingBatchFile,
+    IdentificationStatus,
+    PageGroupStatus,
+    StudentIdentificationResult,
 )
-from backend.app.models.exam import ExamSubmission, SubmissionStatus, ExtractedAnswer
-from backend.app.models.user import Student
+from backend.app.repositories.ai_correction_repository import AICorrectionRepository
 from backend.app.repositories.exam_repository import (
-    ExamRepository, ExamVersionRepository, ExamSubmissionRepository,
-    ExamQuestionRepository, ExtractedAnswerRepository,
+    ExamQuestionRepository,
+    ExamRepository,
+    ExamSubmissionRepository,
+    ExamVersionRepository,
+    ExtractedAnswerRepository,
 )
 from backend.app.repositories.user_repository import StudentRepository
-from backend.app.repositories.ai_correction_repository import AICorrectionRepository
 from backend.app.services.ai_correction_service import AICorrectionService
-from backend.app.integrations.ocr.processor import OCRProcessor
-from backend.app.core.exceptions import ValidationError, NotFoundError, ExternalServiceError
-from backend.app.core.config import settings
 
 
 class BatchGradingService:
@@ -45,7 +55,7 @@ class BatchGradingService:
         self.ai_correction_repo = AICorrectionRepository(db)
         self.ai_service = AICorrectionService(db)
         self.ocr = OCRProcessor()
-        self._batch: Optional[GradingBatch] = None
+        self._batch: GradingBatch | None = None
 
     # ==================== Batch Management ====================
 
@@ -69,13 +79,19 @@ class BatchGradingService:
         self.db.flush()
         return batch
 
-    def add_files(self, batch_id: UUID, files: List[Dict[str, Any]]) -> List[GradingBatchFile]:
+    def add_files(
+        self,
+        batch_id: UUID,
+        files: list[dict[str, Any]],
+        uploaded_by: UUID | None = None,
+    ) -> list[GradingBatchFile]:
         """Adiciona arquivos ao lote."""
         batch = self.get_batch(batch_id)
         if batch.status != BatchStatus.UPLOADING:
             raise ValidationError("Lote não está em estado de upload")
 
         batch_files = []
+        failed_files = 0
         for file_data in files:
             bf = GradingBatchFile(
                 batch_id=batch_id,
@@ -85,24 +101,30 @@ class BatchGradingService:
                 file_size=file_data["size"],
                 file_type=file_data["type"],  # image, pdf
                 page_count=file_data.get("page_count", 1),
+                status=file_data.get("status", FileStatus.PENDING),
+                error_message=file_data.get("error_message"),
             )
             self.db.add(bf)
             batch_files.append(bf)
+            if bf.status == FileStatus.FAILED:
+                failed_files += 1
 
-        batch.total_files = len(batch_files)
-        batch.updated_at = datetime.now(timezone.utc)
+        batch.total_files += len(batch_files)
+        batch.failed_files += failed_files
+        batch.updated_at = datetime.now(UTC)
         self.db.flush()
 
         self._log_audit(batch_id, "files_added", "GradingBatch", batch_id,
                        description=f"{len(batch_files)} arquivos adicionados ao lote",
-                       new_values={"total_files": batch.total_files})
+                       new_values={"total_files": batch.total_files},
+                       performed_by=uploaded_by)
         return batch_files
 
     def start_processing(self, batch_id: UUID) -> GradingBatch:
         """Inicia processamento assíncrono do lote."""
         batch = self.get_batch(batch_id)
         batch.status = BatchStatus.PROCESSING
-        batch.processing_started_at = datetime.now(timezone.utc)
+        batch.processing_started_at = datetime.now(UTC)
         self.db.flush()
 
         self._log_audit(batch_id, "processing_started", "GradingBatch", batch_id,
@@ -117,12 +139,12 @@ class BatchGradingService:
             raise NotFoundError("Lote não encontrado")
         return batch
 
-    def get_batch_with_details(self, batch_id: UUID) -> Dict[str, Any]:
+    def get_batch_with_details(self, batch_id: UUID) -> dict[str, Any]:
         """Retorna detalhes completos do lote para o painel."""
         batch = self.get_batch(batch_id)
 
         # Conta status dos arquivos
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
         file_stats = self.db.execute(
             select(GradingBatchFile.status, func.count(GradingBatchFile.id))
             .where(GradingBatchFile.batch_id == batch_id)
@@ -162,7 +184,7 @@ class BatchGradingService:
             "progress": self._calculate_progress(batch),
         }
 
-    def _calculate_progress(self, batch: GradingBatch) -> Dict[str, Any]:
+    def _calculate_progress(self, batch: GradingBatch) -> dict[str, Any]:
         """Calcula progresso do processamento."""
         if batch.total_files == 0:
             return {"percentage": 0, "stage": "uploading"}
@@ -208,7 +230,7 @@ class BatchGradingService:
                 pages = self._process_file(file)
                 file.processed_pages = len(pages)
                 file.status = FileStatus.PROCESSED
-                file.processed_at = datetime.now(timezone.utc)
+                file.processed_at = datetime.now(UTC)
                 total_pages += len(pages)
 
                 batch.processed_files += 1
@@ -228,18 +250,15 @@ class BatchGradingService:
         self.db.flush()
         return batch
 
-    def _process_file(self, file: GradingBatchFile) -> List[ExamSubmissionPage]:
+    def _process_file(self, file: GradingBatchFile) -> list[ExamSubmissionPage]:
         """Processa um arquivo (imagem ou PDF) e extrai páginas."""
-        pages = []
+        return (
+            self._process_pdf(file)
+            if file.file_type == "pdf"
+            else self._process_image(file)
+        )
 
-        if file.file_type == "pdf":
-            pages = self._process_pdf(file)
-        else:
-            pages = self._process_image(file)
-
-        return pages
-
-    def _process_pdf(self, file: GradingBatchFile) -> List[ExamSubmissionPage]:
+    def _process_pdf(self, file: GradingBatchFile) -> list[ExamSubmissionPage]:
         """Processa PDF multipágina."""
         import fitz  # PyMuPDF
         doc = fitz.open(file.stored_path)
@@ -272,7 +291,7 @@ class BatchGradingService:
         self.db.flush()
         return pages
 
-    def _process_image(self, file: GradingBatchFile) -> List[ExamSubmissionPage]:
+    def _process_image(self, file: GradingBatchFile) -> list[ExamSubmissionPage]:
         """Processa imagem única."""
         ocr_result = self.ocr.process_page(file.stored_path)
 
@@ -311,6 +330,7 @@ class BatchGradingService:
                     identified_count += 1
             except Exception as e:
                 self._log_audit(batch_id, "identification_failed", "ExamSubmissionPage", page.id,
+                               description="Falha ao identificar aluno na página",
                                success=False, error_message=str(e))
 
         batch.identified_students = identified_count
@@ -322,50 +342,73 @@ class BatchGradingService:
         """Identifica aluno em uma página usando OCR + IA."""
         # Extrai texto da página
         full_text = page.full_text or ""
-        ocr_data = page.ocr_data
-
-        # Busca RA e matrícula no texto
         import re
-        ra_pattern = r'\b(RA|ra|Ra)\s*[:\-]?\s*(\d{8,12})\b'
-        mat_pattern = r'\b(Matr[ií]cula|matr[ií]cula)\s*[:\-]?\s*(\d{8,12})\b'
+        ra_pattern = r'\bR\.?A\.?\s*(?:[:=#]\s*|\s+)([A-Za-z0-9][A-Za-z0-9._/-]{0,49})'
+        mat_pattern = (
+            r'\bMatr[ií]cula(?:\s+(?:institucional|número|nº))?'
+            r'\s*(?:[:=#]\s*|\s+)([A-Za-z0-9][A-Za-z0-9._/-]{0,49})'
+        )
 
         ra_match = re.search(ra_pattern, full_text, re.IGNORECASE)
         mat_match = re.search(mat_pattern, full_text, re.IGNORECASE)
 
-        identified_ra = ra_match.group(2) if ra_match else None
-        identified_matricula = mat_match.group(2) if mat_match else None
+        identified_ra = ra_match.group(1).rstrip(".,;:") if ra_match else None
+        identified_matricula = mat_match.group(1).rstrip(".,;:") if mat_match else None
 
-        # Consulta banco de dados
+        student_by_ra = self.student_repo.get_by_ra(identified_ra) if identified_ra else None
+        student_by_registration = (
+            self.student_repo.get_by_registration_number(identified_matricula)
+            if identified_matricula
+            else None
+        )
         matched_student = None
         match_type = "none"
         status = IdentificationStatus.PENDING
         conflict = {}
 
         if identified_ra and identified_matricula:
-            student_ra = self.student_repo.get_by_ra(identified_ra)
-            student_mat = self.student_repo.get_by_field("matricula", identified_matricula) if hasattr(self.student_repo, 'get_by_field') else None
-            # Simplificado - buscar por campo customizado
-            if student_ra:
-                matched_student = student_ra
-                match_type = "ra_only"
+            if (
+                student_by_ra is not None
+                and student_by_registration is not None
+                and student_by_ra.id == student_by_registration.id
+            ):
+                matched_student = student_by_ra
+                match_type = "ra_and_registration_number"
                 status = IdentificationStatus.IDENTIFIED
-            # TODO: implementar busca por matricula
+            elif student_by_ra is not None and student_by_registration is not None:
+                status = IdentificationStatus.CONFLICT
+                conflict["identifiers_match_different_students"] = True
+            else:
+                status = IdentificationStatus.CONFLICT
+                if student_by_ra is None:
+                    conflict["ra_not_found"] = identified_ra
+                if student_by_registration is None:
+                    conflict["registration_number_not_found"] = identified_matricula
         elif identified_ra:
-            student_ra = self.student_repo.get_by_ra(identified_ra)
-            if student_ra:
-                matched_student = student_ra
+            if student_by_ra is not None:
+                matched_student = student_by_ra
                 match_type = "ra_only"
                 status = IdentificationStatus.IDENTIFIED
             else:
                 status = IdentificationStatus.NOT_FOUND
                 conflict["ra_not_found"] = identified_ra
         elif identified_matricula:
-            # TODO: buscar por matricula
-            status = IdentificationStatus.NOT_FOUND
-            conflict["matricula_not_found"] = identified_matricula
+            if student_by_registration is not None:
+                matched_student = student_by_registration
+                match_type = "registration_number_only"
+                status = IdentificationStatus.IDENTIFIED
+            else:
+                status = IdentificationStatus.NOT_FOUND
+                conflict["registration_number_not_found"] = identified_matricula
         else:
             status = IdentificationStatus.PENDING
             conflict["no_identifiers"] = True
+
+        if matched_student is not None and not self._student_is_enrolled_for_page(matched_student.id, page):
+            conflict["student_not_enrolled_in_exam_class"] = True
+            matched_student = None
+            match_type = "none"
+            status = IdentificationStatus.NOT_FOUND
 
         # Cria registro de identificação
         result = StudentIdentificationResult(
@@ -386,12 +429,36 @@ class BatchGradingService:
         self.db.flush()
         return result
 
+    def _student_is_enrolled_for_page(self, student_id: UUID, page: ExamSubmissionPage) -> bool:
+        batch_file = self.db.get(GradingBatchFile, page.batch_file_id)
+        if batch_file is None:
+            return False
+        batch = self.db.get(GradingBatch, batch_file.batch_id)
+        if batch is None:
+            return False
+        exam = self.exam_repo.get(batch.exam_id)
+        if exam is None:
+            return False
+        return self._student_is_enrolled_for_exam(student_id, exam)
+
+    def _student_is_enrolled_for_exam(self, student_id: UUID, exam: Exam) -> bool:
+        return self.db.query(Enrollment.id).filter(
+            Enrollment.student_id == student_id,
+            Enrollment.class_id == exam.class_id,
+            Enrollment.academic_period_id == exam.academic_period_id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        ).first() is not None
+
     # ==================== Page Grouping ====================
 
     def group_pages(self, batch_id: UUID) -> GradingBatch:
         """Agrupa páginas por aluno/prova."""
         batch = self.get_batch(batch_id)
         batch.status = BatchStatus.GROUPING
+
+        exam = self.exam_repo.get(batch.exam_id)
+        if exam is None:
+            raise NotFoundError("Prova não encontrada")
 
         # Busca identificações bem-sucedidas
         identifications = self.db.query(StudentIdentificationResult).join(ExamSubmissionPage).join(GradingBatchFile).filter(
@@ -404,7 +471,26 @@ class BatchGradingService:
         from collections import defaultdict
         student_pages = defaultdict(list)
         for ident in identifications:
-            student_pages[ident.matched_student_id].append(ident.page_id)
+            page = self.db.get(ExamSubmissionPage, ident.page_id)
+            if (
+                page is not None
+                and self._student_is_enrolled_for_exam(ident.matched_student_id, exam)
+            ):
+                student_pages[ident.matched_student_id].append(ident.page_id)
+            else:
+                ident.status = IdentificationStatus.CONFLICT
+                ident.conflict_details = {
+                    **(ident.conflict_details or {}),
+                    "student_not_enrolled_in_exam_class": True,
+                }
+                self._log_audit(
+                    batch_id,
+                    "identification_enrollment_invalid",
+                    "StudentIdentificationResult",
+                    ident.id,
+                    description="Identificação ignorada: aluno sem matrícula ativa na turma da prova",
+                    success=False,
+                )
 
         grouped_count = 0
         for student_id, page_ids in student_pages.items():
@@ -427,9 +513,12 @@ class BatchGradingService:
 
     # ==================== Create Submissions ====================
 
-    def create_submissions_from_groups(self, batch_id: UUID) -> List[ExamSubmission]:
+    def create_submissions_from_groups(self, batch_id: UUID) -> list[ExamSubmission]:
         """Cria submissões a partir dos grupos de páginas."""
         batch = self.get_batch(batch_id)
+        exam = self.exam_repo.get(batch.exam_id)
+        if exam is None:
+            raise NotFoundError("Prova não encontrada")
 
         groups = self.db.query(ExamPageGroup).filter(
             ExamPageGroup.batch_id == batch_id,
@@ -438,6 +527,22 @@ class BatchGradingService:
 
         submissions = []
         for group in groups:
+            if not self._student_is_enrolled_for_exam(group.student_id, exam):
+                group.status = PageGroupStatus.CONFLICT
+                group.conflict_details = {
+                    **(group.conflict_details or {}),
+                    "student_not_enrolled_in_exam_class": True,
+                }
+                self._log_audit(
+                    batch_id,
+                    "submission_creation_blocked",
+                    "ExamPageGroup",
+                    group.id,
+                    description="Submissão não criada: aluno sem matrícula ativa na turma da prova",
+                    success=False,
+                )
+                continue
+
             # Cria submissão
             submission = ExamSubmission(
                 batch_id=batch_id,
@@ -490,6 +595,7 @@ class BatchGradingService:
                 pending_review += result.requires_review_count
             except Exception as e:
                 self._log_audit(batch_id, "grading_failed", "ExamSubmission", submission.id,
+                               description="Falha ao corrigir submissão do lote",
                                success=False, error_message=str(e))
 
         batch.graded_submissions = graded
@@ -499,7 +605,7 @@ class BatchGradingService:
             batch.status = BatchStatus.PARTIAL
         else:
             batch.status = BatchStatus.COMPLETED
-            batch.processing_completed_at = datetime.now(timezone.utc)
+            batch.processing_completed_at = datetime.now(UTC)
 
         self.db.flush()
         return batch
@@ -516,18 +622,27 @@ class BatchGradingService:
         if not student:
             raise NotFoundError("Aluno não encontrado")
 
+        page = self.db.get(ExamSubmissionPage, ident.page_id)
+        if page is None or not self._student_is_enrolled_for_page(student_id, page):
+            raise ValidationError("O aluno não possui matrícula ativa na turma da prova")
+        batch_file = self.db.get(GradingBatchFile, page.batch_file_id)
+        if batch_file is None:
+            raise NotFoundError("Arquivo do lote não encontrado")
+        batch = self.get_batch(batch_file.batch_id)
+
         ident.matched_student_id = student_id
         ident.status = IdentificationStatus.MANUAL
         ident.manual_override = True
         ident.overridden_by = teacher_id
-        ident.overridden_at = datetime.now(timezone.utc)
+        ident.overridden_at = datetime.now(UTC)
         self.db.flush()
 
-        self._log_audit(ident.submission_id, "manual_identification", "StudentIdentificationResult", identification_id,
+        self._log_audit(batch.id, "manual_identification", "StudentIdentificationResult", identification_id,
+                       description="Identificação manual de aluno",
                        old_values={"status": "pending"}, new_values={"student_id": str(student_id), "manual": True})
         return ident
 
-    def get_pending_identifications(self, batch_id: UUID) -> List[StudentIdentificationResult]:
+    def get_pending_identifications(self, batch_id: UUID) -> list[StudentIdentificationResult]:
         """Busca identificações pendentes de revisão."""
         return self.db.query(StudentIdentificationResult).join(ExamSubmissionPage).join(GradingBatchFile).filter(
             GradingBatchFile.batch_id == batch_id,
@@ -542,7 +657,7 @@ class BatchGradingService:
     # ==================== Audit ====================
 
     def _log_audit(self, batch_id: UUID, action: str, entity_type: str, entity_id: UUID,
-                   description: str, old_values: Dict = None, new_values: Dict = None,
+                   description: str, old_values: dict = None, new_values: dict = None,
                    performed_by: UUID = None, success: bool = True, error_message: str = None):
         """Registra log de auditoria."""
         log = GradingAuditLog(

@@ -1,13 +1,14 @@
 """Service de Auditoria e Logs."""
 
-from typing import Optional, List
 from uuid import UUID
-from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from backend.app.models.audit import AuditLog, AuditActionType, SystemLog
-from backend.app.repositories.ai_correction_repository import AuditLogRepository, SystemLogRepository
+from backend.app.models.audit import AuditActionType, AuditLog, SystemLog
+from backend.app.repositories.ai_correction_repository import (
+    AuditLogRepository,
+    SystemLogRepository,
+)
 from backend.app.schemas.common import PaginationParams, paginate
 
 
@@ -23,17 +24,17 @@ class AuditService:
         self,
         action: AuditActionType,
         description: str,
-        user_id: Optional[UUID] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        old_values: Optional[dict] = None,
-        new_values: Optional[dict] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        request_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        user_id: UUID | None = None,
+        entity_type: str | None = None,
+        entity_id: UUID | None = None,
+        old_values: dict | None = None,
+        new_values: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        session_id: str | None = None,
         success: bool = True,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> AuditLog:
         """Registra ação de auditoria."""
         return self.repo.log(
@@ -91,13 +92,13 @@ class SystemLogService:
         level: str,
         logger: str,
         message: str,
-        module: Optional[str] = None,
-        function: Optional[str] = None,
-        line_number: Optional[int] = None,
-        traceback: Optional[str] = None,
-        context: Optional[dict] = None,
-        user_id: Optional[UUID] = None,
-        request_id: Optional[str] = None,
+        module: str | None = None,
+        function: str | None = None,
+        line_number: int | None = None,
+        traceback: str | None = None,
+        context: dict | None = None,
+        user_id: UUID | None = None,
+        request_id: str | None = None,
     ) -> SystemLog:
         """Registra log do sistema."""
         return self.repo.log(
@@ -113,6 +114,6 @@ class SystemLogService:
             request_id=request_id,
         )
 
-    def get_errors(self, hours: int = 24, limit: int = 100) -> List[SystemLog]:
+    def get_errors(self, hours: int = 24, limit: int = 100) -> list[SystemLog]:
         """Busca logs de erro recentes."""
         return self.repo.get_errors(hours=hours, limit=limit)

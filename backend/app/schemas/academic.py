@@ -1,12 +1,13 @@
 """Schemas Pydantic para Módulo Acadêmico."""
 
-from datetime import datetime, date
-from typing import Optional, List
-from uuid import UUID
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.app.models.academic import ACADEMIC_ASSIGNMENT_PERMISSIONS, EnrollmentStatus
 
 # ==================== Course Schemas ====================
 
@@ -14,7 +15,7 @@ class CourseBase(BaseModel):
     """Campos base do curso."""
     code: str = Field(..., min_length=1, max_length=20)
     name: str = Field(..., min_length=2, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
     duration_semesters: int = Field(default=8, ge=1, le=20)
 
 
@@ -25,11 +26,11 @@ class CourseCreate(CourseBase):
 
 class CourseUpdate(BaseModel):
     """Schema para atualização de curso."""
-    code: Optional[str] = Field(None, min_length=1, max_length=20)
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    description: Optional[str] = None
-    duration_semesters: Optional[int] = Field(None, ge=1, le=20)
-    is_active: Optional[bool] = None
+    code: str | None = Field(None, min_length=1, max_length=20)
+    name: str | None = Field(None, min_length=2, max_length=255)
+    description: str | None = None
+    duration_semesters: int | None = Field(None, ge=1, le=20)
+    is_active: bool | None = None
 
 
 class CourseResponse(CourseBase):
@@ -54,7 +55,7 @@ class SubjectBase(BaseModel):
     """Campos base da disciplina."""
     code: str = Field(..., min_length=1, max_length=20)
     name: str = Field(..., min_length=2, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
     workload_hours: int = Field(default=60, ge=1)
     credits: int = Field(default=4, ge=1)
     course_id: UUID
@@ -67,12 +68,12 @@ class SubjectCreate(SubjectBase):
 
 class SubjectUpdate(BaseModel):
     """Schema para atualização de disciplina."""
-    code: Optional[str] = Field(None, min_length=1, max_length=20)
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    description: Optional[str] = None
-    workload_hours: Optional[int] = Field(None, ge=1)
-    credits: Optional[int] = Field(None, ge=1)
-    is_active: Optional[bool] = None
+    code: str | None = Field(None, min_length=1, max_length=20)
+    name: str | None = Field(None, min_length=2, max_length=255)
+    description: str | None = None
+    workload_hours: int | None = Field(None, ge=1)
+    credits: int | None = Field(None, ge=1)
+    is_active: bool | None = None
 
 
 class SubjectResponse(SubjectBase):
@@ -99,11 +100,11 @@ class ClassBase(BaseModel):
     course_id: UUID
     subject_id: UUID
     academic_period_id: UUID
-    teacher_id: Optional[UUID] = None
+    teacher_id: UUID | None = None
     semester: int = Field(..., ge=1, le=20)
     year: int = Field(..., ge=2000, le=2100)
-    schedule: Optional[str] = Field(None, max_length=500)
-    classroom: Optional[str] = Field(None, max_length=100)
+    schedule: str | None = Field(None, max_length=500)
+    classroom: str | None = Field(None, max_length=100)
     max_students: int = Field(default=50, ge=1, le=200)
 
 
@@ -114,13 +115,13 @@ class ClassCreate(ClassBase):
 
 class ClassUpdate(BaseModel):
     """Schema para atualização de turma."""
-    code: Optional[str] = Field(None, min_length=1, max_length=20)
-    name: Optional[str] = Field(None, min_length=2, max_length=255)
-    teacher_id: Optional[UUID] = None
-    schedule: Optional[str] = Field(None, max_length=500)
-    classroom: Optional[str] = Field(None, max_length=100)
-    max_students: Optional[int] = Field(None, ge=1, le=200)
-    is_active: Optional[bool] = None
+    code: str | None = Field(None, min_length=1, max_length=20)
+    name: str | None = Field(None, min_length=2, max_length=255)
+    teacher_id: UUID | None = None
+    schedule: str | None = Field(None, max_length=500)
+    classroom: str | None = Field(None, max_length=100)
+    max_students: int | None = Field(None, ge=1, le=200)
+    is_active: bool | None = None
 
 
 class ClassResponse(ClassBase):
@@ -149,8 +150,8 @@ class AcademicPeriodBase(BaseModel):
     code: str = Field(..., min_length=1, max_length=20)
     start_date: date
     end_date: date
-    enrollment_start: Optional[date] = None
-    enrollment_end: Optional[date] = None
+    enrollment_start: date | None = None
+    enrollment_end: date | None = None
 
 
 class AcademicPeriodCreate(AcademicPeriodBase):
@@ -160,13 +161,13 @@ class AcademicPeriodCreate(AcademicPeriodBase):
 
 class AcademicPeriodUpdate(BaseModel):
     """Schema para atualização de período letivo."""
-    name: Optional[str] = Field(None, min_length=2, max_length=100)
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    enrollment_start: Optional[date] = None
-    enrollment_end: Optional[date] = None
-    status: Optional[str] = None
-    is_current: Optional[bool] = None
+    name: str | None = Field(None, min_length=2, max_length=100)
+    start_date: date | None = None
+    end_date: date | None = None
+    enrollment_start: date | None = None
+    enrollment_end: date | None = None
+    status: str | None = None
+    is_current: bool | None = None
 
 
 class AcademicPeriodResponse(AcademicPeriodBase):
@@ -196,10 +197,10 @@ class EnrollmentCreate(EnrollmentBase):
 
 class EnrollmentUpdate(BaseModel):
     """Schema para atualização de matrícula."""
-    status: Optional[str] = None
-    final_grade: Optional[Decimal] = Field(None, ge=0, max_digits=5, decimal_places=2)
-    attendance_percentage: Optional[Decimal] = Field(None, ge=0, le=100, max_digits=5, decimal_places=2)
-    situation: Optional[str] = None
+    status: EnrollmentStatus | None = None
+    final_grade: Decimal | None = Field(None, ge=0, max_digits=5, decimal_places=2)
+    attendance_percentage: Decimal | None = Field(None, ge=0, le=100, max_digits=5, decimal_places=2)
+    situation: str | None = None
 
 
 class EnrollmentResponse(EnrollmentBase):
@@ -209,9 +210,9 @@ class EnrollmentResponse(EnrollmentBase):
     id: UUID
     status: str
     enrolled_at: datetime
-    final_grade: Optional[Decimal] = None
-    attendance_percentage: Optional[Decimal] = None
-    situation: Optional[str] = None
+    final_grade: Decimal | None = None
+    attendance_percentage: Decimal | None = None
+    situation: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -228,7 +229,7 @@ class TeacherSubjectBase(BaseModel):
     """Campos base da associação professor-disciplina."""
     teacher_id: UUID
     subject_id: UUID
-    academic_period_id: Optional[UUID] = None
+    academic_period_id: UUID | None = None
     is_coordinator: bool = False
 
 
@@ -246,12 +247,59 @@ class TeacherSubjectResponse(TeacherSubjectBase):
     created_at: datetime
 
 
+class AcademicAssignmentCreate(BaseModel):
+    teacher_id: UUID
+    subject_id: UUID
+    class_id: UUID
+    academic_period_id: UUID
+    permissions: dict[str, bool] = Field(default_factory=dict)
+
+    @field_validator("permissions")
+    @classmethod
+    def validate_permissions(cls, value: dict[str, bool]) -> dict[str, bool]:
+        unknown = set(value) - set(ACADEMIC_ASSIGNMENT_PERMISSIONS)
+        if unknown:
+            raise ValueError(f"Permissões desconhecidas: {', '.join(sorted(unknown))}")
+        return value
+
+
+class AcademicAssignmentUpdate(BaseModel):
+    permissions: dict[str, bool] | None = None
+    is_active: bool | None = None
+
+    @field_validator("permissions")
+    @classmethod
+    def validate_permissions(cls, value: dict[str, bool] | None) -> dict[str, bool] | None:
+        if value is None:
+            return None
+        unknown = set(value) - set(ACADEMIC_ASSIGNMENT_PERMISSIONS)
+        if unknown:
+            raise ValueError(f"Permissões desconhecidas: {', '.join(sorted(unknown))}")
+        return value
+
+
+class AcademicAssignmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    teacher_id: UUID
+    subject_id: UUID
+    class_id: UUID
+    academic_period_id: UUID
+    permissions: dict[str, bool]
+    is_active: bool
+    assigned_by: UUID | None
+    deactivated_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 # ==================== Assessment Schemas ====================
 
 class AssessmentBase(BaseModel):
     """Campos base da avaliação."""
     title: str = Field(..., min_length=2, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
     type: str = Field(..., pattern="^(a1|a2|a3|recovery|final_exam|complementary|custom)$")
     weight: Decimal = Field(default=Decimal("1.00"), ge=0)
     max_score: Decimal = Field(default=Decimal("10.00"), gt=0)
@@ -268,13 +316,13 @@ class AssessmentCreate(AssessmentBase):
 
 class AssessmentUpdate(BaseModel):
     """Schema para atualização de avaliação."""
-    title: Optional[str] = Field(None, min_length=2, max_length=255)
-    description: Optional[str] = None
-    type: Optional[str] = None
-    weight: Optional[Decimal] = Field(None, ge=0)
-    max_score: Optional[Decimal] = Field(None, gt=0)
-    scheduled_date: Optional[date] = None
-    is_published: Optional[bool] = None
+    title: str | None = Field(None, min_length=2, max_length=255)
+    description: str | None = None
+    type: str | None = None
+    weight: Decimal | None = Field(None, ge=0)
+    max_score: Decimal | None = Field(None, gt=0)
+    scheduled_date: date | None = None
+    is_published: bool | None = None
 
 
 class AssessmentResponse(AssessmentBase):
@@ -310,9 +358,9 @@ class GradeCreate(GradeBase):
 
 class GradeUpdate(BaseModel):
     """Schema para atualização de nota."""
-    score: Optional[Decimal] = Field(None, ge=0, max_digits=5, decimal_places=2)
-    is_official: Optional[bool] = None
-    notes: Optional[str] = None
+    score: Decimal | None = Field(None, ge=0, max_digits=5, decimal_places=2)
+    is_official: bool | None = None
+    notes: str | None = None
 
 
 class GradeResponse(GradeBase):
@@ -321,10 +369,10 @@ class GradeResponse(GradeBase):
 
     id: UUID
     is_official: bool
-    graded_by: Optional[UUID] = None
-    graded_at: Optional[datetime] = None
-    published_at: Optional[datetime] = None
-    notes: Optional[str] = None
+    graded_by: UUID | None = None
+    graded_at: datetime | None = None
+    published_at: datetime | None = None
+    notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -343,7 +391,7 @@ class AttendanceBase(BaseModel):
     class_date: date
     is_present: bool = False
     justified: bool = False
-    justification: Optional[str] = None
+    justification: str | None = None
 
 
 class AttendanceCreate(AttendanceBase):
@@ -353,9 +401,9 @@ class AttendanceCreate(AttendanceBase):
 
 class AttendanceUpdate(BaseModel):
     """Schema para atualização de frequência."""
-    is_present: Optional[bool] = None
-    justified: Optional[bool] = None
-    justification: Optional[str] = None
+    is_present: bool | None = None
+    justified: bool | None = None
+    justification: str | None = None
 
 
 class AttendanceResponse(AttendanceBase):
@@ -373,7 +421,7 @@ class AttendanceResponse(AttendanceBase):
 class AcademicRuleBase(BaseModel):
     """Campos base da regra acadêmica."""
     name: str = Field(..., min_length=2, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
     rule_type: str = Field(..., min_length=1, max_length=50)
     config: str  # JSON string
 
@@ -385,11 +433,11 @@ class AcademicRuleCreate(AcademicRuleBase):
 
 class AcademicRuleUpdate(BaseModel):
     """Schema para atualização de regra."""
-    name: Optional[str] = Field(None, min_length=2, max_length=100)
-    description: Optional[str] = None
-    rule_type: Optional[str] = None
-    config: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=2, max_length=100)
+    description: str | None = None
+    rule_type: str | None = None
+    config: str | None = None
+    is_active: bool | None = None
 
 
 class AcademicRuleResponse(AcademicRuleBase):
@@ -408,23 +456,24 @@ class BulkEnrollmentCreate(BaseModel):
     """Criação em lote de matrículas."""
     class_id: UUID
     academic_period_id: UUID
-    student_ids: List[UUID]
+    student_ids: list[UUID]
 
 
 class BulkGradeCreate(BaseModel):
     """Criação em lote de notas."""
     assessment_id: UUID
-    grades: List[GradeCreate]
+    grades: list[GradeCreate]
 
 
 class BulkAttendanceCreate(BaseModel):
     """Criação em lote de frequência."""
     class_id: UUID
     class_date: date
-    attendances: List[AttendanceCreate]
+    attendances: list[AttendanceCreate]
 
 
 # Forward references
-from backend.app.schemas.user import StudentResponse, TeacherResponse
+from backend.app.schemas.user import StudentResponse, TeacherResponse  # noqa: E402
+
 ClassWithRelations.model_rebuild()
 EnrollmentWithRelations.model_rebuild()

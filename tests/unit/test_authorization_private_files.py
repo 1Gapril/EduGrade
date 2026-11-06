@@ -11,18 +11,27 @@ from sqlalchemy.pool import StaticPool
 from backend.app.core.database import Base, get_db
 from backend.app.core.security import get_current_active_user
 from backend.app.main import app
-from backend.app.models.academic import AcademicPeriod, Class, Course, Subject
+from backend.app.models.academic import (
+    AcademicAssignment,
+    AcademicPeriod,
+    Class,
+    Course,
+    Enrollment,
+    EnrollmentStatus,
+    Subject,
+)
 from backend.app.models.exam import (
     AnswerKey,
     Exam,
     ExamCopy,
     ExamQuestion,
+    ExamStatus,
     ExamSubmission,
     ExamVersion,
     QuestionType,
     SubmissionStatus,
 )
-from backend.app.models.user import Student, User, UserRole
+from backend.app.models.user import Student, Teacher, User, UserRole
 
 
 @pytest.fixture
@@ -44,7 +53,7 @@ def authorization_api():
         full_name="DADO_DE_TESTE_EDUGRADE Admin",
         role=UserRole.ADMIN,
     )
-    teacher = User(
+    teacher_user = User(
         id=uuid4(),
         email="DADO_DE_TESTE_EDUGRADE.teacher@example.test",
         username="DADO_DE_TESTE_EDUGRADE_teacher",
@@ -52,6 +61,7 @@ def authorization_api():
         full_name="DADO_DE_TESTE_EDUGRADE Teacher",
         role=UserRole.TEACHER,
     )
+    teacher = Teacher(id=uuid4(), user=teacher_user, employee_id="DADO_DE_TESTE_EDUGRADE-TEACH-001")
     student_user = User(
         id=uuid4(),
         email="DADO_DE_TESTE_EDUGRADE.student@example.test",
@@ -87,6 +97,7 @@ def authorization_api():
         academic_period=period,
         semester=1,
         year=2026,
+        teacher=teacher,
     )
     exam = Exam(
         title="DADO_DE_TESTE_EDUGRADE Exam",
@@ -95,6 +106,7 @@ def authorization_api():
         academic_period=period,
         created_by=admin.id,
         total_score=Decimal("10.00"),
+        status=ExamStatus.PUBLISHED,
     )
     version = ExamVersion(
         exam=exam,
@@ -143,9 +155,32 @@ def authorization_api():
         status=SubmissionStatus.UPLOADED,
         original_files=["private/other.pdf"],
     )
+    teacher_assignment = AcademicAssignment(
+        teacher=teacher,
+        subject=subject,
+        class_=class_,
+        academic_period=period,
+        assigned_by=admin.id,
+        permissions={
+            "view_history": True,
+            "receive_submissions": True,
+            "create_assessments": True,
+            "manage_answer_keys": True,
+        },
+    )
+    student_enrollments = [
+        Enrollment(
+            student=profile,
+            class_=class_,
+            academic_period=period,
+            status=EnrollmentStatus.ACTIVE,
+        )
+        for profile in (student, other_student)
+    ]
     db.add_all(
         [
             admin,
+            teacher_user,
             teacher,
             student_user,
             other_student_user,
@@ -162,6 +197,8 @@ def authorization_api():
             other_copy,
             own_submission,
             other_submission,
+            teacher_assignment,
+            *student_enrollments,
         ]
     )
     db.commit()
@@ -185,11 +222,14 @@ def authorization_api():
         "client": client,
         "actor": actor,
         "admin": admin,
+        "teacher_user": teacher_user,
         "teacher": teacher,
         "student": student,
         "other_student": other_student,
         "question": question,
         "exam": exam,
+        "version": version,
+        "db": db,
         "own_submission": own_submission,
         "other_submission": other_submission,
     }
@@ -199,6 +239,47 @@ def authorization_api():
     app.dependency_overrides.update(original_overrides)
     db.close()
     engine.dispose()
+
+
+def test_teachers_can_list_active_published_versions_and_create_unique_upload_copies(authorization_api):
+    client = authorization_api["client"]
+    actor = authorization_api["actor"]
+    exam = authorization_api["exam"]
+    version = authorization_api["version"]
+    exam.status = ExamStatus.PUBLISHED
+    authorization_api["db"].commit()
+
+    assert client.get("/api/v1/exams/versions/active").status_code == 403
+
+    actor[0] = authorization_api["teacher_user"]
+    listed = client.get("/api/v1/exams/versions/active")
+
+    assert listed.status_code == 200
+    assert listed.json() == [
+        {
+            "version_id": str(version.id),
+            "exam_id": str(exam.id),
+            "title": version.title,
+            "version_number": version.version_number,
+            "class_id": str(exam.class_id),
+            "class_name": exam.class_.name,
+            "subject_name": exam.subject.name,
+        }
+    ]
+
+    first = client.post(
+        f"/api/v1/exams/versions/{version.id}/copies",
+        params={"count": 1, "student_ids": str(authorization_api["student"].id)},
+    )
+    second = client.post(
+        f"/api/v1/exams/versions/{version.id}/copies",
+        params={"count": 1, "student_ids": str(authorization_api["student"].id)},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()[0]["copy_identifier"].endswith("-0003")
+    assert second.json()[0]["copy_identifier"].endswith("-0004")
 
 
 def test_students_only_list_and_read_their_own_limited_submissions(authorization_api):
@@ -228,6 +309,56 @@ def test_students_only_list_and_read_their_own_limited_submissions(authorization
     assert other.status_code == 404
 
 
+def test_submission_identification_requires_active_class_enrollment(authorization_api):
+    outside_user = User(
+        id=uuid4(),
+        email="outside-student@example.org",
+        username="outside-student",
+        hashed_password="not-a-real-password",
+        full_name="Outside Student",
+        role=UserRole.STUDENT,
+    )
+    outside_student = Student(
+        user=outside_user,
+        ra="OUTSIDE-RA",
+        registration_number="OUTSIDE-MAT",
+    )
+    authorization_api["db"].add_all([outside_user, outside_student])
+    authorization_api["db"].commit()
+    authorization_api["actor"][0] = authorization_api["teacher_user"]
+
+    wrong_copy_student = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(authorization_api["other_student"].id),
+            "confidence": "99",
+        },
+    )
+    assert wrong_copy_student.status_code == 400
+    assert wrong_copy_student.json()["error"] == "ValidationError"
+
+    response = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(outside_student.id),
+            "confidence": "99",
+            "manual": "true",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "ValidationError"
+
+    enrolled = authorization_api["client"].post(
+        f"/api/v1/exams/submissions/{authorization_api['own_submission'].id}/identify",
+        params={
+            "student_id": str(authorization_api["student"].id),
+            "confidence": "99",
+        },
+    )
+    assert enrolled.status_code == 200
+
+
 def test_students_do_not_receive_answer_keys_but_staff_can(authorization_api):
     client = authorization_api["client"]
     question_id = authorization_api["question"].id
@@ -242,7 +373,7 @@ def test_students_do_not_receive_answer_keys_but_staff_can(authorization_api):
     assert "answer_key" not in student_question.json()
     assert "DADO_DE_TESTE_EDUGRADE answer" not in student_question.text
 
-    for role in ("teacher", "admin"):
+    for role in ("teacher_user", "admin"):
         authorization_api["actor"][0] = authorization_api[role]
         staff_question = client.get(f"/api/v1/exams/questions/{question_id}")
         assert staff_question.status_code == 200

@@ -1,13 +1,13 @@
 """Gerador de QR Code para identificação de provas."""
 
+import base64
+from io import BytesIO
+from typing import Any
+
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
 from qrcode.image.styles.colormasks import SolidFillColorMask
-from io import BytesIO
-from typing import Dict, Any, Optional
-import base64
-from PIL import Image
+from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
 
 
 class QRCodeGenerator:
@@ -27,8 +27,8 @@ class QRCodeGenerator:
 
     def generate(
         self,
-        data: Dict[str, Any],
-        output_path: Optional[str] = None,
+        data: dict[str, Any],
+        output_path: str | None = None,
         styled: bool = False,
     ) -> bytes:
         """
@@ -74,19 +74,19 @@ class QRCodeGenerator:
 
         return png_bytes
 
-    def generate_base64(self, data: Dict[str, Any], styled: bool = False) -> str:
+    def generate_base64(self, data: dict[str, Any], styled: bool = False) -> str:
         """Gera QR Code e retorna base64."""
         png_bytes = self.generate(data, styled=styled)
         return base64.b64encode(png_bytes).decode('utf-8')
 
-    def generate_data_uri(self, data: Dict[str, Any], styled: bool = False) -> str:
+    def generate_data_uri(self, data: dict[str, Any], styled: bool = False) -> str:
         """Gera QR Code como data URI para HTML."""
         b64 = self.generate_base64(data, styled=styled)
         return f"data:image/png;base64,{b64}"
 
     def generate_batch(
         self,
-        items: list[Dict[str, Any]],
+        items: list[dict[str, Any]],
         output_dir: str,
         prefix: str = "qr_",
     ) -> list[str]:
@@ -103,7 +103,7 @@ class QRCodeGenerator:
         return paths
 
     @staticmethod
-    def parse_qr_data(qr_string: str) -> Dict[str, Any]:
+    def parse_qr_data(qr_string: str) -> dict[str, Any]:
         """Parseia dados do QR Code."""
         import json
         try:
@@ -117,8 +117,8 @@ class QRCodeGenerator:
         exam_id: str,
         version_id: str,
         copy_identifier: str,
-        student_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        student_id: str | None = None,
+    ) -> dict[str, Any]:
         """Constrói dados padrão para QR Code de prova."""
         data = {
             "exam_id": exam_id,

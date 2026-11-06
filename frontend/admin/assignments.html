@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atribuições Acadêmicas - EduGrade</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .assignment-layout { display: grid; gap: 1.5rem; }
+    .assignment-form, .assignment-card { padding: 1.25rem; background: var(--color-white); border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); }
+    .assignment-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; }
+    .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem 1rem; margin: 1rem 0; }
+    .permission-grid label { display: flex; align-items: flex-start; gap: .5rem; }
+    .assignment-card header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+    .assignment-card h3 { margin: 0; }
+    .assignment-actions { display: flex; gap: .5rem; }
+    .status-text { font-weight: 600; }
+    #page-message { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <main class="container" style="max-width: 1200px; padding: 2rem 1rem;">
+    <header style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem">
+      <div>
+        <p><a href="/admin/dashboard.html">← Painel administrativo</a></p>
+        <h1>Atribuições Acadêmicas e Permissões</h1>
+        <p>Associe professor, matéria, turma e período. Cada permissão é aplicada no backend ao contexto selecionado.</p>
+      </div>
+      <button class="btn btn-ghost" id="refresh-assignments" type="button">Atualizar</button>
+    </header>
+    <p id="page-message" role="status" aria-live="polite"></p>
+    <div class="assignment-layout">
+      <section class="assignment-form" aria-labelledby="create-title">
+        <h2 id="create-title">Nova atribuição</h2>
+        <form id="create-assignment-form">
+          <div class="assignment-fields">
+            <label>Professor<select id="teacher-id" required></select></label>
+            <label>Matéria<select id="subject-id" required></select></label>
+            <label>Turma<select id="class-id" required></select></label>
+            <label>Período letivo<input id="period-label" readonly aria-label="Período letivo da turma"></label>
+          </div>
+          <h3>Permissões para este vínculo</h3>
+          <div class="permission-grid" id="create-permissions"></div>
+          <button class="btn btn-primary" type="submit">Criar atribuição</button>
+        </form>
+      </section>
+      <section id="permissions" aria-labelledby="assignments-title">
+        <h2 id="assignments-title">Atribuições e permissões configuráveis</h2>
+        <div id="assignment-list" class="assignment-layout"></div>
+      </section>
+    </div>
+  </main>
+  <script src="../js/main.js"></script>
+  <script>
+    const permissionLabels = {
+      view_students: 'Visualizar alunos vinculados',
+      create_students: 'Cadastrar alunos',
+      edit_students: 'Editar alunos',
+      create_assessments: 'Criar e publicar avaliações/provas',
+      edit_assessments: 'Editar avaliações/provas',
+      manage_answer_keys: 'Gerenciar gabaritos e rubricas',
+      receive_submissions: 'Receber e consultar provas submetidas',
+      upload_submissions: 'Enviar provas',
+      run_ocr: 'Iniciar OCR',
+      review_corrections: 'Revisar correções da IA',
+      grade_questions: 'Corrigir questões',
+      edit_grades: 'Editar notas',
+      approve_corrections: 'Aprovar correções',
+      publish_grades: 'Publicar notas',
+      view_history: 'Consultar histórico'
+    };
+    const permissionKeys = Object.keys(permissionLabels);
+    let teachers = [];
+    let subjects = [];
+    let classes = [];
+    let periods = [];
+    let assignments = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      State.init();
+      if (!await Auth.init()) { window.location.replace('/login.html'); return; }
+      if (!Auth.requireRole('admin')) return;
+      document.getElementById('create-assignment-form').addEventListener('submit', createAssignment);
+      document.getElementById('refresh-assignments').addEventListener('click', loadPage);
+      document.getElementById('subject-id').addEventListener('change', updateClassOptions);
+      document.getElementById('class-id').addEventListener('change', updatePeriodLabel);
+      await loadPage();
+    });
+
+    function setMessage(message, kind = '') {
+      const element = document.getElementById('page-message');
+      element.textContent = message;
+      element.className = kind ? `text-${kind}` : '';
+    }
+
+    function listItems(response) {
+      return Array.isArray(response) ? response : (response.items || []);
+    }
+
+    async function loadPage() {
+      setMessage('Carregando vínculos e estrutura acadêmica...');
+      try {
+        const [teacherResponse, subjectResponse, classResponse, periodResponse, assignmentResponse] = await Promise.all([
+          api.request('/users/teachers?page=1&page_size=100'),
+          api.request('/academic/subjects?page=1&page_size=100'),
+          api.request('/academic/classes?page=1&page_size=100'),
+          api.request('/academic/periods?page=1&page_size=100'),
+          api.request('/academic/assignments?active_only=false')
+        ]);
+        teachers = listItems(teacherResponse);
+        subjects = listItems(subjectResponse);
+        classes = listItems(classResponse);
+        periods = listItems(periodResponse);
+        assignments = listItems(assignmentResponse);
+        fillSelect('teacher-id', teachers, teacher => teacher.user?.full_name || `Professor ${teacher.id}`);
+        fillSelect('subject-id', subjects.filter(subject => subject.is_active), subject => `${subject.code} — ${subject.name}`);
+        updateClassOptions();
+        renderPermissions(document.getElementById('create-permissions'), {});
+        renderAssignments();
+        setMessage(`${assignments.length} atribuição(ões) carregada(s).`, 'success');
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível carregar as atribuições.', 'danger');
+      }
+    }
+
+    function fillSelect(id, items, labelFor) {
+      const select = document.getElementById(id);
+      select.replaceChildren(new Option('Selecione...', ''));
+      items.forEach(item => select.add(new Option(labelFor(item), item.id)));
+    }
+
+    function updateClassOptions() {
+      const subjectId = document.getElementById('subject-id').value;
+      const filtered = classes.filter(item => item.subject_id === subjectId);
+      fillSelect('class-id', filtered, item => `${item.code} — ${item.name}`);
+      updatePeriodLabel();
+    }
+
+    function updatePeriodLabel() {
+      const classRecord = classes.find(item => item.id === document.getElementById('class-id').value);
+      const period = periods.find(item => item.id === classRecord?.academic_period_id);
+      document.getElementById('period-label').value = period ? `${period.name} (${period.code})` : '';
+    }
+
+    function renderPermissions(container, selected) {
+      container.replaceChildren();
+      permissionKeys.forEach(key => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = key;
+        input.checked = selected[key] === true;
+        label.append(input, document.createTextNode(permissionLabels[key]));
+        container.append(label);
+      });
+    }
+
+    function selectedPermissions(container) {
+      return Object.fromEntries(permissionKeys.map(key => [
+        key,
+        container.querySelector(`[name="${key}"]`).checked
+      ]));
+    }
+
+    async function createAssignment(event) {
+      event.preventDefault();
+      const classRecord = classes.find(item => item.id === document.getElementById('class-id').value);
+      if (!classRecord) {
+        setMessage('Selecione uma turma válida para a matéria escolhida.', 'danger');
+        return;
+      }
+      const payload = {
+        teacher_id: document.getElementById('teacher-id').value,
+        subject_id: document.getElementById('subject-id').value,
+        class_id: classRecord.id,
+        academic_period_id: classRecord.academic_period_id,
+        permissions: selectedPermissions(document.getElementById('create-permissions'))
+      };
+      try {
+        await api.request('/academic/assignments', { method: 'POST', body: payload });
+        document.getElementById('create-assignment-form').reset();
+        updateClassOptions();
+        await loadPage();
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível criar a atribuição.', 'danger');
+      }
+    }
+
+    function renderAssignments() {
+      const list = document.getElementById('assignment-list');
+      list.replaceChildren();
+      if (!assignments.length) {
+        const empty = document.createElement('p');
+        empty.textContent = 'Ainda não há atribuições acadêmicas.';
+        list.append(empty);
+        return;
+      }
+      assignments.forEach(assignment => {
+        const teacher = teachers.find(item => item.id === assignment.teacher_id);
+        const subject = subjects.find(item => item.id === assignment.subject_id);
+        const classRecord = classes.find(item => item.id === assignment.class_id);
+        const period = periods.find(item => item.id === assignment.academic_period_id);
+        const card = document.createElement('article');
+        card.className = 'assignment-card';
+        const header = document.createElement('header');
+        const title = document.createElement('h3');
+        title.textContent = `${teacher?.user?.full_name || 'Professor'} — ${subject?.name || 'Matéria'} — ${classRecord?.name || 'Turma'}`;
+        const status = document.createElement('span');
+        status.className = 'status-text';
+        status.textContent = assignment.is_active ? `Ativa · ${period?.name || 'Período'}` : `Inativa · ${period?.name || 'Período'}`;
+        header.append(title, status);
+        const permissions = document.createElement('div');
+        permissions.className = 'permission-grid';
+        renderPermissions(permissions, assignment.permissions);
+        const actions = document.createElement('div');
+        actions.className = 'assignment-actions';
+        const save = document.createElement('button');
+        save.className = 'btn btn-primary btn-sm';
+        save.type = 'button';
+        save.textContent = 'Salvar permissões';
+        save.addEventListener('click', () => updateAssignment(assignment, permissions, {}));
+        const toggle = document.createElement('button');
+        toggle.className = 'btn btn-ghost btn-sm';
+        toggle.type = 'button';
+        toggle.textContent = assignment.is_active ? 'Desativar' : 'Reativar';
+        toggle.addEventListener('click', () => updateAssignment(assignment, permissions, { is_active: !assignment.is_active }));
+        actions.append(save, toggle);
+        card.append(header, permissions, actions);
+        list.append(card);
+      });
+    }
+
+    async function updateAssignment(assignment, permissions, changes) {
+      try {
+        await api.request(`/academic/assignments/${assignment.id}`, {
+          method: 'PATCH',
+          body: { permissions: selectedPermissions(permissions), ...changes }
+        });
+        await loadPage();
+      } catch (error) {
+        setMessage(error.message || 'Não foi possível atualizar a atribuição.', 'danger');
+      }
+    }
+  </script>
+</body>
+</html>

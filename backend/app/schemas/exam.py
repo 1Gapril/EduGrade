@@ -1,11 +1,15 @@
 """Schemas Pydantic para Provas, Questões, Gabaritos, Impressão, Submissões."""
 
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any
-from uuid import UUID
+from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any, Literal, Optional
+from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+if TYPE_CHECKING:
+    from backend.app.schemas.academic import ClassResponse, SubjectResponse
+    from backend.app.schemas.ai_correction import AICorrectionResponse
 
 
 # ==================== Exam Schemas ====================
@@ -13,15 +17,15 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 class ExamBase(BaseModel):
     """Campos base da prova."""
     title: str = Field(..., min_length=2, max_length=255)
-    description: Optional[str] = None
-    instructions: Optional[str] = None
+    description: str | None = None
+    instructions: str | None = None
     class_id: UUID
     subject_id: UUID
     academic_period_id: UUID
     total_score: Decimal = Field(default=Decimal("10.00"), gt=0)
-    scheduled_date: Optional[date] = None
+    scheduled_date: date | None = None
     duration_minutes: int = Field(default=120, ge=10, le=480)
-    print_config: Dict[str, Any] = Field(default_factory=dict)
+    print_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExamCreate(ExamBase):
@@ -34,13 +38,13 @@ class ExamQuestionDraft(BaseModel):
     type: str = Field(pattern="^(multiple_choice|essay|short_answer|calculation|multi_criteria)$")
     statement: str = Field(min_length=1)
     score: Decimal = Field(gt=0)
-    config: Dict[str, Any] = Field(default_factory=dict)
-    correct_answer: Optional[str] = None
-    expected_answer: Optional[str] = None
-    accepted_alternatives: List[str] = Field(default_factory=list)
-    keywords: List[str] = Field(default_factory=list)
-    required_concepts: List[str] = Field(default_factory=list)
-    justification: Optional[str] = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    correct_answer: str | None = None
+    expected_answer: str | None = None
+    accepted_alternatives: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    required_concepts: list[str] = Field(default_factory=list)
+    justification: str | None = None
 
     @model_validator(mode="after")
     def validate_answer_key(self):
@@ -65,7 +69,7 @@ class ExamQuestionDraft(BaseModel):
 
 class ExamCreateWithQuestions(ExamCreate):
     """Prova completa: dados, questões pontuadas e gabaritos."""
-    questions: List[ExamQuestionDraft] = Field(min_length=1)
+    questions: list[ExamQuestionDraft] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_question_scores(self):
@@ -77,16 +81,62 @@ class ExamCreateWithQuestions(ExamCreate):
         return self
 
 
+class ExamQuestionDraftUpdate(ExamQuestionDraft):
+    """Questão existente ou nova enviada ao editar uma prova."""
+    id: UUID | None = None
+
+
+class ExamUpdateWithQuestions(ExamBase):
+    """Atualização completa de uma prova em rascunho."""
+    questions: list[ExamQuestionDraftUpdate] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_question_scores(self):
+        question_total = sum((question.score for question in self.questions), Decimal("0"))
+        if question_total != self.total_score:
+            raise ValueError(
+                f"A soma das questões ({question_total}) deve ser igual ao valor total ({self.total_score})."
+            )
+        return self
+
+
+class ImportedExamQuestion(BaseModel):
+    """Questão extraída por IA, aguardando conferência do professor."""
+
+    type: Literal["multiple_choice", "essay", "short_answer", "calculation", "multi_criteria"]
+    statement: str = Field(min_length=1)
+    score: Decimal = Field(gt=0)
+    alternatives: list[str] = Field(default_factory=list)
+    correct_answer: str | None = None
+    expected_answer: str | None = None
+    accepted_alternatives: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    required_concepts: list[str] = Field(default_factory=list)
+    justification: str | None = None
+    answer_needs_review: bool = True
+
+
+class ExamPDFImportResponse(BaseModel):
+    """Conteúdo proposto pela IA a partir da prova e do gabarito enviados."""
+
+    title: str = Field(min_length=2, max_length=255)
+    description: str | None = None
+    instructions: str | None = None
+    total_score: Decimal = Field(gt=0)
+    questions: list[ImportedExamQuestion] = Field(min_length=1, max_length=100)
+    review_notes: list[str] = Field(default_factory=list)
+
+
 class ExamUpdate(BaseModel):
     """Schema para atualização de prova."""
-    title: Optional[str] = Field(None, min_length=2, max_length=255)
-    description: Optional[str] = None
-    instructions: Optional[str] = None
-    total_score: Optional[Decimal] = Field(None, gt=0)
-    scheduled_date: Optional[date] = None
-    duration_minutes: Optional[int] = Field(None, ge=10, le=480)
-    status: Optional[str] = None
-    print_config: Optional[Dict[str, Any]] = None
+    title: str | None = Field(None, min_length=2, max_length=255)
+    description: str | None = None
+    instructions: str | None = None
+    total_score: Decimal | None = Field(None, gt=0)
+    scheduled_date: date | None = None
+    duration_minutes: int | None = Field(None, ge=10, le=480)
+    status: str | None = None
+    print_config: dict[str, Any] | None = None
 
 
 class ExamResponse(ExamBase):
@@ -100,7 +150,7 @@ class ExamResponse(ExamBase):
     is_template: bool
     created_at: datetime
     updated_at: datetime
-    published_at: Optional[datetime] = None
+    published_at: datetime | None = None
 
 
 class ExamWithRelations(ExamResponse):
@@ -117,12 +167,12 @@ class ExamVersionBase(BaseModel):
     exam_id: UUID
     version_number: int
     title: str
-    description: Optional[str] = None
-    instructions: Optional[str] = None
+    description: str | None = None
+    instructions: str | None = None
     total_score: Decimal
-    questions_snapshot: List[Dict[str, Any]]
-    answer_key_snapshot: Dict[str, Any]
-    rubrics_snapshot: Dict[str, Any]
+    questions_snapshot: list[dict[str, Any]]
+    answer_key_snapshot: dict[str, Any]
+    rubrics_snapshot: dict[str, Any]
 
 
 class ExamVersionCreate(ExamVersionBase):
@@ -149,7 +199,7 @@ class QuestionBase(BaseModel):
     type: str = Field(..., pattern="^(multiple_choice|essay|short_answer|calculation|multi_criteria)$")
     statement: str = Field(..., min_length=1)
     score: Decimal = Field(..., gt=0)
-    config: Dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class QuestionCreate(QuestionBase):
@@ -159,11 +209,11 @@ class QuestionCreate(QuestionBase):
 
 class QuestionUpdate(BaseModel):
     """Schema para atualização de questão."""
-    question_order: Optional[int] = Field(None, ge=1)
-    type: Optional[str] = None
-    statement: Optional[str] = Field(None, min_length=1)
-    score: Optional[Decimal] = Field(None, gt=0)
-    config: Optional[Dict[str, Any]] = None
+    question_order: int | None = Field(None, ge=1)
+    type: str | None = None
+    statement: str | None = Field(None, min_length=1)
+    score: Decimal | None = Field(None, gt=0)
+    config: dict[str, Any] | None = None
 
 
 class QuestionResponse(QuestionBase):
@@ -186,13 +236,13 @@ class QuestionWithAnswerKey(QuestionResponse):
 class AnswerKeyBase(BaseModel):
     """Campos base do gabarito."""
     question_id: UUID
-    correct_answer: Optional[str] = None
-    expected_answer: Optional[str] = None
-    accepted_alternatives: List[str] = Field(default_factory=list)
-    keywords: List[str] = Field(default_factory=list)
-    required_concepts: List[str] = Field(default_factory=list)
-    justification: Optional[str] = None
-    partial_scoring: Dict[str, Any] = Field(default_factory=dict)
+    correct_answer: str | None = None
+    expected_answer: str | None = None
+    accepted_alternatives: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    required_concepts: list[str] = Field(default_factory=list)
+    justification: str | None = None
+    partial_scoring: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnswerKeyCreate(AnswerKeyBase):
@@ -202,13 +252,13 @@ class AnswerKeyCreate(AnswerKeyBase):
 
 class AnswerKeyUpdate(BaseModel):
     """Schema para atualização de gabarito."""
-    correct_answer: Optional[str] = None
-    expected_answer: Optional[str] = None
-    accepted_alternatives: Optional[List[str]] = None
-    keywords: Optional[List[str]] = None
-    required_concepts: Optional[List[str]] = None
-    justification: Optional[str] = None
-    partial_scoring: Optional[Dict[str, Any]] = None
+    correct_answer: str | None = None
+    expected_answer: str | None = None
+    accepted_alternatives: list[str] | None = None
+    keywords: list[str] | None = None
+    required_concepts: list[str] | None = None
+    justification: str | None = None
+    partial_scoring: dict[str, Any] | None = None
 
 
 class AnswerKeyResponse(AnswerKeyBase):
@@ -225,7 +275,7 @@ class AnswerKeyResponse(AnswerKeyBase):
 class GradingRubricBase(BaseModel):
     """Campos base da rubrica."""
     question_id: UUID
-    criteria: List[Dict[str, Any]] = Field(default_factory=list)
+    criteria: list[dict[str, Any]] = Field(default_factory=list)
     max_score: Decimal = Field(..., gt=0)
 
 
@@ -236,8 +286,8 @@ class GradingRubricCreate(GradingRubricBase):
 
 class GradingRubricUpdate(BaseModel):
     """Schema para atualização de rubrica."""
-    criteria: Optional[List[Dict[str, Any]]] = None
-    max_score: Optional[Decimal] = Field(None, gt=0)
+    criteria: list[dict[str, Any]] | None = None
+    max_score: Decimal | None = Field(None, gt=0)
 
 
 class GradingRubricResponse(GradingRubricBase):
@@ -256,7 +306,7 @@ class ExamCopyBase(BaseModel):
     version_id: UUID
     copy_identifier: str
     qr_code_data: str
-    student_id: Optional[UUID] = None
+    student_id: UUID | None = None
     is_personalized: bool = False
 
 
@@ -270,9 +320,9 @@ class ExamCopyResponse(ExamCopyBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    pdf_path: Optional[str] = None
-    printed_at: Optional[datetime] = None
-    printed_by: Optional[UUID] = None
+    pdf_path: str | None = None
+    printed_at: datetime | None = None
+    printed_by: UUID | None = None
     created_at: datetime
 
 
@@ -284,7 +334,7 @@ class ExamPrintLogBase(BaseModel):
     version_id: UUID
     printed_by: UUID
     copy_count: int = Field(..., ge=1)
-    copy_identifiers: List[str]
+    copy_identifiers: list[str]
 
 
 class ExamPrintLogCreate(ExamPrintLogBase):
@@ -298,10 +348,10 @@ class ExamPrintLogResponse(ExamPrintLogBase):
 
     id: UUID
     status: str
-    pdf_path: Optional[str] = None
-    error_message: Optional[str] = None
+    pdf_path: str | None = None
+    error_message: str | None = None
     started_at: datetime
-    completed_at: Optional[datetime] = None
+    completed_at: datetime | None = None
 
 
 # ==================== Submission Schemas ====================
@@ -310,8 +360,8 @@ class SubmissionBase(BaseModel):
     """Campos base da submissão."""
     copy_id: UUID
     version_id: UUID
-    student_id: Optional[UUID] = None
-    original_files: List[str]
+    student_id: UUID | None = None
+    original_files: list[str]
 
 
 class SubmissionCreate(SubmissionBase):
@@ -321,11 +371,11 @@ class SubmissionCreate(SubmissionBase):
 
 class SubmissionUpdate(BaseModel):
     """Schema para atualização de submissão."""
-    status: Optional[str] = None
-    processed_files: Optional[List[str]] = None
-    identified_student_id: Optional[UUID] = None
-    identification_confidence: Optional[Decimal] = None
-    manual_identification: Optional[bool] = None
+    status: str | None = None
+    processed_files: list[str] | None = None
+    identified_student_id: UUID | None = None
+    identification_confidence: Decimal | None = None
+    manual_identification: bool | None = None
 
 
 class SubmissionResponse(SubmissionBase):
@@ -334,12 +384,12 @@ class SubmissionResponse(SubmissionBase):
 
     id: UUID
     status: str
-    processed_files: List[str]
-    identified_student_id: Optional[UUID] = None
-    identification_confidence: Optional[Decimal] = None
+    processed_files: list[str]
+    identified_student_id: UUID | None = None
+    identification_confidence: Decimal | None = None
     manual_identification: bool
     submitted_at: datetime
-    processed_at: Optional[datetime] = None
+    processed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -347,8 +397,8 @@ class SubmissionResponse(SubmissionBase):
 class SubmissionWithRelations(SubmissionResponse):
     """Submissão com relacionamentos."""
     copy: ExamCopyResponse
-    pages: List["SubmissionPageResponse"] = []
-    ai_corrections: List["AICorrectionResponse"] = []
+    pages: list["SubmissionPageResponse"] = []
+    ai_corrections: list["AICorrectionResponse"] = []
 
 
 class SubmissionStudentResponse(BaseModel):
@@ -358,7 +408,7 @@ class SubmissionStudentResponse(BaseModel):
     id: UUID
     status: str
     submitted_at: datetime
-    processed_at: Optional[datetime] = None
+    processed_at: datetime | None = None
 
 
 # ==================== Submission Page Schemas ====================
@@ -380,10 +430,10 @@ class SubmissionPageResponse(SubmissionPageBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    processed_image_path: Optional[str] = None
+    processed_image_path: str | None = None
     rotation_angle: float
     perspective_corrected: bool
-    ocr_confidence: Optional[Decimal] = None
+    ocr_confidence: Decimal | None = None
     created_at: datetime
 
 
@@ -394,10 +444,10 @@ class ExtractedAnswerBase(BaseModel):
     page_id: UUID
     question_id: UUID
     question_order: int
-    extracted_text: Optional[str] = None
-    extracted_image_path: Optional[str] = None
-    ocr_confidence: Optional[Decimal] = None
-    bounding_box: Dict[str, Any] = Field(default_factory=dict)
+    extracted_text: str | None = None
+    extracted_image_path: str | None = None
+    ocr_confidence: Decimal | None = None
+    bounding_box: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExtractedAnswerCreate(ExtractedAnswerBase):
@@ -420,14 +470,14 @@ class QRCodeData(BaseModel):
     exam_id: UUID
     version_id: UUID
     copy_identifier: str
-    student_id: Optional[UUID] = None
+    student_id: UUID | None = None
 
 
 class QRCodeGenerateRequest(BaseModel):
     """Requisição para geração de QR Code."""
     exam_id: UUID
     version_id: UUID
-    copies: List[QRCodeData]
+    copies: list[QRCodeData]
 
 
 # ==================== Validation Schemas ====================
@@ -437,7 +487,7 @@ class ExamScoreValidation(BaseModel):
     total_configured: Decimal
     total_questions: Decimal
     is_valid: bool
-    differences: List[str] = Field(default_factory=list)
+    differences: list[str] = Field(default_factory=list)
 
 
 class QuestionScoreValidation(BaseModel):

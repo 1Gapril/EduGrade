@@ -1,11 +1,11 @@
 """Configuração do banco de dados EduGrade."""
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from backend.app.core.config import settings
 
@@ -42,6 +42,10 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -64,14 +68,15 @@ def init_db() -> None:
     """Inicializa o banco de dados criando todas as tabelas."""
     # Import models to register them
     from backend.app.models import (  # noqa: F401
-        user,
-        access_request,
         academic,
-        exam,
+        access_request,
+        admin_settings,
         ai_correction,
         audit,
+        exam,
         grading_batch,
-        admin_settings,
+        quality_run,
+        user,
     )
 
     Base.metadata.create_all(bind=engine)

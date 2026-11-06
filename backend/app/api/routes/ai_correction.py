@@ -1,24 +1,47 @@
 """Rotas de Correção por IA e Revisão."""
 
-from typing import List, Optional
 from uuid import UUID
-from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.api.routes.exams import _assert_submission_access
+from backend.app.core.config import settings
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_active_user, require_teacher_or_admin
-from backend.app.models.user import User
+from backend.app.models.ai_correction import AICorrection, CorrectionReview
+from backend.app.models.exam import ExamSubmission
+from backend.app.models.user import User, UserRole
 from backend.app.schemas.ai_correction import (
-    CorrectionRequest, CorrectionResponse,
-    BatchCorrectionRequest, BatchCorrectionResponse,
-    CorrectionReviewResponse, CorrectionReviewUpdate,
-    AICorrectionResponse, AIHealthCheck, AIModelsList,
+    AICorrectionResponse,
+    AIHealthCheck,
+    AIModelsList,
+    BatchCorrectionRequest,
+    BatchCorrectionResponse,
+    CorrectionRequest,
+    CorrectionResponse,
+    CorrectionReviewResponse,
+    CorrectionReviewUpdate,
 )
 from backend.app.services.ai_correction_service import AICorrectionService
 
 router = APIRouter(prefix="/ai", tags=["Correção por IA"])
+
+
+def _assert_correction_access(
+    db: Session,
+    current_user: User,
+    correction_id: UUID,
+    permission: str,
+) -> AICorrection:
+    correction = db.get(AICorrection, correction_id)
+    if correction is None:
+        raise HTTPException(status_code=404, detail="Correção não encontrada")
+    submission = db.get(ExamSubmission, correction.submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    _assert_submission_access(db, current_user, submission, permission)
+    return correction
 
 
 # ==================== AI Provider ====================
@@ -78,6 +101,10 @@ async def batch_correct(
     db: Session = Depends(get_db),
 ):
     """Correção em lote de uma submissão."""
+    submission = db.get(ExamSubmission, request.submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    _assert_submission_access(db, current_user, submission, "grade_questions")
     service = AICorrectionService(db)
     try:
         result = await service.batch_correct(request)
@@ -88,13 +115,17 @@ async def batch_correct(
     return result
 
 
-@router.get("/submissions/{submission_id}/corrections", response_model=List[AICorrectionResponse])
+@router.get("/submissions/{submission_id}/corrections", response_model=list[AICorrectionResponse])
 def list_corrections(
     submission_id: UUID,
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
     """Lista correções de uma submissão."""
+    submission = db.get(ExamSubmission, submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    _assert_submission_access(db, current_user, submission, "review_corrections")
     service = AICorrectionService(db)
     return service.correction_repo.get_by_submission(submission_id)
 
@@ -107,6 +138,7 @@ def get_correction(
 ):
     """Busca correção específica."""
     service = AICorrectionService(db)
+    _assert_correction_access(db, current_user, correction_id, "review_corrections")
     correction = service.correction_repo.get_with_review(correction_id)
     if not correction:
         raise HTTPException(status_code=404, detail="Correção não encontrada")
@@ -122,6 +154,7 @@ def start_review(
     db: Session = Depends(get_db),
 ):
     """Inicia revisão de uma correção."""
+    _assert_correction_access(db, current_user, correction_id, "review_corrections")
     service = AICorrectionService(db)
     return service.create_review(correction_id, current_user.id)
 
@@ -134,6 +167,10 @@ def update_review(
     db: Session = Depends(get_db),
 ):
     """Atualiza revisão com decisão do professor."""
+    review = db.get(CorrectionReview, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Revisão não encontrada")
+    _assert_correction_access(db, current_user, review.ai_correction_id, "review_corrections")
     service = AICorrectionService(db)
     return service.update_review(
         review_id=review_id,
@@ -146,14 +183,29 @@ def update_review(
     )
 
 
-@router.get("/reviews/pending", response_model=List[CorrectionReviewResponse])
+@router.get("/reviews/pending", response_model=list[CorrectionReviewResponse])
 def list_pending_reviews(
     current_user: User = Depends(require_teacher_or_admin),
     db: Session = Depends(get_db),
 ):
     """Lista revisões pendentes do professor."""
     service = AICorrectionService(db)
-    return service.review_repo.get_pending()
+    reviews = service.review_repo.get_pending()
+    if current_user.role == UserRole.ADMIN:
+        return reviews
+    accessible = []
+    for review in reviews:
+        submission = db.get(ExamSubmission, review.ai_correction.submission_id)
+        if submission is None:
+            continue
+        try:
+            _assert_submission_access(db, current_user, submission, "review_corrections")
+        except HTTPException as exc:
+            if exc.status_code != 403:
+                raise
+            continue
+        accessible.append(review)
+    return accessible
 
 
 # ==================== Publish Grades ====================
@@ -165,6 +217,10 @@ def publish_grades(
     db: Session = Depends(get_db),
 ):
     """Publica notas após revisão completa."""
+    submission_record = db.get(ExamSubmission, submission_id)
+    if submission_record is None:
+        raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    _assert_submission_access(db, current_user, submission_record, "publish_grades")
     service = AICorrectionService(db)
     submission = service.publish_grades(submission_id, current_user.id)
     return {"message": "Notas publicadas com sucesso", "submission_id": str(submission.id)}

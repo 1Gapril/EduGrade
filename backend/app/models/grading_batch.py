@@ -2,11 +2,12 @@
 
 import enum
 from datetime import datetime
-from typing import Optional, List
-from uuid import UUID, uuid4
 from decimal import Decimal
+from typing import TYPE_CHECKING, Optional
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Enum,
@@ -16,14 +17,15 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    UniqueConstraint,
-    CheckConstraint,
-    JSON,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.core.database import Base
+
+if TYPE_CHECKING:
+    from backend.app.models.exam import ExamSubmission
+    from backend.app.models.user import Student
 
 
 class BatchStatus(str, enum.Enum):

@@ -61,6 +61,69 @@
       font-size: 0.75rem;
       text-transform: uppercase;
     }
+    .workspace-exam-list {
+      display: grid;
+      gap: var(--space-4);
+    }
+    .workspace-exam-card {
+      padding: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .workspace-exam-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+    .workspace-exam-title {
+      color: var(--color-gray-900);
+      font-size: 1.1rem;
+    }
+    .workspace-exam-context {
+      margin-top: var(--space-1);
+      color: var(--color-gray-500);
+    }
+    .workspace-exam-status {
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-md);
+      background: var(--color-gray-100);
+      color: var(--color-gray-700);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .workspace-exam-status.status-published,
+    .workspace-exam-status.status-printed {
+      background: var(--color-success-light);
+      color: var(--color-success);
+    }
+    .workspace-exam-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: var(--space-3);
+      margin: var(--space-4) 0;
+    }
+    .workspace-exam-details dt {
+      color: var(--color-gray-500);
+      font-size: 0.8rem;
+    }
+    .workspace-exam-details dd {
+      margin-top: var(--space-1);
+      color: var(--color-gray-800);
+      font-weight: 600;
+    }
+    .workspace-exam-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+    .workspace-empty-state {
+      padding: var(--space-4);
+      color: var(--color-gray-500);
+      text-align: center;
+    }
     .workspace-form {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

@@ -150,6 +150,10 @@
             <span data-feather="users"></span>
             <span class="nav-item-text">Minhas Turmas</span>
           </a>
+          <a href="/professor/students.html" class="nav-item" data-href="/professor/students.html">
+            <span data-feather="user"></span>
+            <span class="nav-item-text">Alunos</span>
+          </a>
           <a href="/professor/exams.html" class="nav-item" data-href="/professor/exams.html">
             <span data-feather="file-text"></span>
             <span class="nav-item-text">Minhas Provas</span>
@@ -157,6 +161,10 @@
           <a href="/professor/corrections.html" class="nav-item" data-href="/professor/corrections.html">
             <span data-feather="check-circle"></span>
             <span class="nav-item-text">Correções Pendentes</span>
+          </a>
+          <a href="/professor/upload-exams.html" class="nav-item" data-href="/professor/upload-exams.html">
+            <span data-feather="upload"></span>
+            <span class="nav-item-text">Enviar Provas para Correção</span>
           </a>
           <a href="/professor/grades.html" class="nav-item" data-href="/professor/grades.html">
             <span data-feather="award"></span>
@@ -237,6 +245,7 @@
           </div>
           <div class="teacher-actions">
             <a href="/exams/create.html" class="btn btn-primary"><span data-feather="plus"></span> Nova Prova</a>
+            <a href="/professor/upload-exams.html" class="btn btn-success"><span data-feather="upload"></span> Enviar Prova Respondida</a>
             <a href="/correcao-lote.html" class="btn btn-success"><span data-feather="upload"></span> Correção em Lote</a>
           </div>
         </div>
@@ -327,6 +336,10 @@
                 <span data-feather="upload"></span>
                 <span>Correção em Lote</span>
               </a>
+              <a href="/professor/upload-exams.html" class="quick-action-btn">
+                <span data-feather="file-plus"></span>
+                <span>Enviar Prova Respondida</span>
+              </a>
               <a href="/professor/grades.html" class="quick-action-btn">
                 <span data-feather="edit"></span>
                 <span>Lançar Notas</span>
@@ -414,14 +427,149 @@
 
     async function loadMyClasses() {
       document.getElementById('my-classes-section').style.display = 'block';
-      document.getElementById('my-classes-list').textContent =
-        'A API não disponibiliza o identificador do perfil docente necessário para filtrar as turmas deste professor.';
+      const container = document.getElementById('my-classes-list');
+      container.textContent = 'Carregando turmas...';
+      try {
+        // O endpoint /academic/classes/my retorna apenas as turmas do professor
+        const response = await api.request('/academic/classes/my?page=1&page_size=100');
+        const classes = Array.isArray(response) ? response : (response?.items || []);
+        if (!classes.length) {
+          container.textContent = 'Você não possui turmas atribuídas.';
+          document.getElementById('teacher-classes').textContent = '0';
+          return;
+        }
+        document.getElementById('teacher-classes').textContent = String(classes.length);
+        container.replaceChildren();
+        classes.forEach(cls => {
+          const card = document.createElement('div');
+          card.className = 'class-card';
+
+          const header = document.createElement('div');
+          header.className = 'class-card-header';
+          const headerText = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'class-card-title';
+          title.textContent = cls.name || 'Turma sem nome';
+          const subject = document.createElement('div');
+          subject.className = 'class-card-subject';
+          subject.textContent = cls.subject?.name || 'Disciplina não informada';
+          headerText.append(title, subject);
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-success';
+          badge.textContent = cls.code || '';
+          header.append(headerText, badge);
+
+          const body = document.createElement('div');
+          body.className = 'class-card-body';
+          const meta = document.createElement('div');
+          meta.className = 'class-card-meta';
+          const students = document.createElement('span');
+          const studentsIcon = document.createElement('span');
+          studentsIcon.dataset.feather = 'users';
+          students.append(
+            studentsIcon,
+            ` ${cls.enrollments_count ?? cls.enrollments?.length ?? 0} alunos`,
+          );
+          const period = document.createElement('span');
+          const periodIcon = document.createElement('span');
+          periodIcon.dataset.feather = 'calendar';
+          period.append(periodIcon, ` ${cls.year || '—'}/${cls.semester || '—'}º semestre`);
+          meta.append(students, period);
+
+          const actions = document.createElement('div');
+          actions.className = 'class-card-actions';
+          const detailsLink = document.createElement('a');
+          detailsLink.href = `/professor/class-detail.html?id=${encodeURIComponent(cls.id)}`;
+          detailsLink.className = 'btn btn-secondary btn-sm';
+          detailsLink.textContent = 'Ver detalhes';
+          const createLink = document.createElement('a');
+          createLink.href = `/exams/create.html?class_id=${encodeURIComponent(cls.id)}`;
+          createLink.className = 'btn btn-primary btn-sm';
+          createLink.textContent = 'Criar prova';
+          actions.append(detailsLink, createLink);
+
+          body.append(meta, actions);
+          card.append(header, body);
+          container.appendChild(card);
+        });
+        feather.replace();
+      } catch (error) {
+        container.textContent = 'Erro ao carregar turmas: ' + error.message;
+      }
     }
 
     async function loadMyExams() {
       document.getElementById('my-exams-section').style.display = 'block';
-      document.getElementById('my-exams-list').textContent =
-        'A API não disponibiliza uma listagem de provas filtrada pelo professor autenticado.';
+      const container = document.getElementById('my-exams-list');
+      container.textContent = 'Carregando provas...';
+      try {
+        // O endpoint /exams agora filtra por professor automaticamente
+        const response = await api.request('/exams?page=1&page_size=10');
+        const exams = Array.isArray(response) ? response : (response?.items || []);
+        if (!exams.length) {
+          container.textContent = 'Você ainda não criou provas.';
+          return;
+        }
+        container.replaceChildren();
+        exams.forEach(exam => {
+          const card = document.createElement('article');
+          card.className = 'exam-card';
+          const statuses = {
+            draft: 'Rascunho',
+            in_edit: 'Em edição',
+            awaiting_validation: 'Aguardando validação',
+            published: 'Publicada',
+            printed: 'Impressa',
+            in_application: 'Em aplicação',
+            awaiting_correction: 'Aguardando correção',
+            in_correction: 'Em correção',
+            awaiting_review: 'Aguardando revisão',
+            finalized: 'Finalizada',
+            cancelled: 'Cancelada',
+          };
+          const header = document.createElement('div');
+          header.className = 'exam-card-header';
+          const title = document.createElement('span');
+          title.className = 'exam-card-title';
+          title.textContent = exam.title || 'Prova sem título';
+          const status = document.createElement('span');
+          status.className = `exam-status ${exam.status}`;
+          status.textContent = statuses[exam.status] || exam.status;
+          header.append(title, status);
+          card.appendChild(header);
+
+          const body = document.createElement('div');
+          body.className = 'exam-card-body';
+          const meta = document.createElement('p');
+          meta.textContent = [
+            exam.subject?.name,
+            exam.class_?.name,
+          ].filter(Boolean).join(' · ') || 'Turma/Disciplina não informada';
+          body.appendChild(meta);
+
+          const actions = document.createElement('div');
+          actions.className = 'class-card-actions';
+          if (['draft', 'in_edit'].includes(exam.status)) {
+            const editBtn = document.createElement('a');
+            editBtn.href = `/exams/edit.html?id=${exam.id}`;
+            editBtn.className = 'btn btn-secondary btn-sm';
+            editBtn.textContent = 'Editar';
+            actions.appendChild(editBtn);
+          }
+          if (['published', 'printed'].includes(exam.status)) {
+            const printBtn = document.createElement('a');
+            printBtn.href = '/exams/print.html';
+            printBtn.className = 'btn btn-secondary btn-sm';
+            printBtn.textContent = 'Imprimir';
+            actions.appendChild(printBtn);
+          }
+          body.appendChild(actions);
+          card.appendChild(body);
+          container.appendChild(card);
+        });
+      } catch (error) {
+        container.textContent = 'Erro ao carregar provas: ' + error.message;
+      }
     }
 
     async function loadPendingCorrections() {
