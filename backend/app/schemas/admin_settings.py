@@ -153,3 +153,25 @@ class AdminSettingAuditResponse(BaseModel):
     new_values: dict | None
     success: bool
     created_at: datetime
+
+
+class StorageFolderUsage(BaseModel):
+    """Uso de disco de uma pasta de armazenamento."""
+
+    key: str
+    label: str
+    path: str
+    exists: bool
+    file_count: int
+    total_bytes: int
+
+
+class StorageUsageResponse(BaseModel):
+    """Resumo do armazenamento local do EduGrade."""
+
+    folders: list[StorageFolderUsage]
+    database_path: str | None = None
+    database_bytes: int = 0
+    total_bytes: int = 0
+    free_bytes: int | None = None
+    generated_at: datetime

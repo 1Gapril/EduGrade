@@ -472,6 +472,49 @@ class BulkAttendanceCreate(BaseModel):
     attendances: list[AttendanceCreate]
 
 
+# ==================== Consultas do próprio aluno ====================
+
+class MyAttendanceRecord(BaseModel):
+    """Registro individual de frequência do aluno autenticado."""
+
+    date: date
+    is_present: bool
+    justified: bool
+    justification: str | None = None
+
+
+class MyAttendanceSummary(BaseModel):
+    """Resumo de frequência por matrícula do aluno autenticado."""
+
+    enrollment_id: UUID
+    class_id: UUID
+    class_code: str
+    class_name: str
+    subject_name: str
+    total_classes: int
+    present_count: int
+    absent_count: int
+    justified_count: int
+    percentage: Decimal
+    records: list[MyAttendanceRecord]
+
+
+class MyScheduleItem(BaseModel):
+    """Item da grade horária do aluno autenticado."""
+
+    class_id: UUID
+    class_code: str
+    class_name: str
+    subject_name: str
+    course_name: str
+    teacher_name: str | None = None
+    schedule: str | None = None
+    classroom: str | None = None
+    semester: int
+    year: int
+    period_name: str | None = None
+
+
 # Forward references
 from backend.app.schemas.user import StudentResponse, TeacherResponse  # noqa: E402
 

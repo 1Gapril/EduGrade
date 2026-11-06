@@ -50,6 +50,20 @@
   3. Instale as dependências necessárias:
   pip install -r requirements.txt
 
+  🔐 Acesso Rápido (contas de demonstração)
+
+  Após iniciar o servidor, acesse http://localhost:8000/login.html e use as
+  contas criadas pelo seed — duas para cada perfil:
+
+  | Perfil | Usuário | Senha |
+  |---|---|---|
+  | Administrador | admin / admin2 | admin123 |
+  | Professor | professor / professor2 | prof123 |
+  | Aluno | aluno / aluno2 | aluno123 |
+
+  A lista completa está em `CREDENCIAIS.md`. Para limpar o banco e recriar
+  apenas o necessário: `python scripts\reset_db.py`.
+
   ⚙️ Comandos para Execução e Testes
 
   - Executar o Backend:
@@ -78,6 +92,19 @@
   ├───────────────────────────────────────────┼───────────────────────────┤
   │ SETUP.md                                  │ Guia completo de          │
   │                                           │ instalação e configuração │
+  ├───────────────────────────────────────────┼───────────────────────────┤
+  │ CREDENCIAIS.md                            │ Usuários e senhas das     │
+  │                                           │ contas de demonstração    │
+  ├───────────────────────────────────────────┼───────────────────────────┤
+  │ docs/PROGRESSO_GLOBAL.md                  │ Barra global de progresso:│
+  │                                           │ uploads, importações e IA │
+  ├───────────────────────────────────────────┼───────────────────────────┤
+  │ docs/COMANDOS_TESTES_E_COBERTURA.md       │ Comandos de testes        │
+  │                                           │ unitários e cobertura     │
+  ├───────────────────────────────────────────┼───────────────────────────┤
+  │ docs/ROTEIRO_APRESENTACAO_COMPLETO.md     │ Roteiro de apresentação   │
+  │                                           │ (tecnologias, telas, Git, │
+  │                                           │ testes e demonstração)    │
   ├───────────────────────────────────────────┼───────────────────────────┤
   │ como_rodar.md                             │ Passo a passo para rodar  │
   │                                           │ no CMD                    │

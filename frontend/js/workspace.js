@@ -64,9 +64,9 @@ const WORKSPACE_SCREENS = {
   },
   '/admin/storage.html': {
     title: 'Armazenamento',
-    description: 'Informações de armazenamento ainda não são disponibilizadas pela API.',
+    description: 'Uso de disco das pastas de armazenamento e do banco de dados.',
     roles: ['admin'],
-    message: 'A consulta de uso e gerenciamento de arquivos ainda não está implementada.',
+    storageUsage: true,
   },
   '/exams/list.html': {
     title: 'Banco de provas',
@@ -162,6 +162,18 @@ const WORKSPACE_SCREENS = {
     roles: ['teacher'],
     gradeManagement: true,
   },
+  '/imports/students.html': {
+    title: 'Importar alunos',
+    description: 'Crie contas, perfis e matrículas em lote a partir de um arquivo CSV.',
+    roles: ['admin', 'teacher'],
+    importKind: 'students',
+  },
+  '/imports/grades.html': {
+    title: 'Importar notas',
+    description: 'Lance notas em lote a partir de um arquivo CSV.',
+    roles: ['admin', 'teacher'],
+    importKind: 'grades',
+  },
   '/professor/class-detail.html': {
     title: 'Detalhes da turma',
     description: 'Turmas cadastradas no sistema.',
@@ -176,16 +188,16 @@ const WORKSPACE_SCREENS = {
     endpoint: '/academic/grades/my?page=1&page_size=100',
   },
   '/aluno/attendance.html': {
-    title: 'Frequência',
-    description: 'A consulta de frequência do aluno ainda não está disponível pela API.',
+    title: 'Minha frequência',
+    description: 'Presenças e faltas registradas nas suas matrículas ativas.',
     roles: ['student'],
-    message: 'A API permite consultar a frequência de uma matrícula específica, mas esta tela ainda não carrega a matrícula do aluno.',
+    myAttendance: true,
   },
   '/aluno/schedule.html': {
     title: 'Grade horária',
-    description: 'A consulta de grade horária ainda não está disponível pela API.',
+    description: 'Horários, salas e professores das suas turmas.',
     roles: ['student'],
-    message: 'O sistema ainda não possui uma operação de consulta de grade horária para esta tela.',
+    mySchedule: true,
   },
   '/profile.html': {
     title: 'Meu perfil',
@@ -253,7 +265,6 @@ function renderWorkspaceTable(container, rows) {
 function renderExamList(container, exams) {
   container.classList.add('workspace-exam-list');
   container.replaceChildren();
-  exams = exams.filter(exam => exam.status !== 'cancelled');
 
   if (exams.length === 0) {
     const emptyState = document.createElement('p');
@@ -334,6 +345,59 @@ function renderExamList(container, exams) {
       editLink.textContent = 'Editar';
       actions.appendChild(editLink);
     }
+    if (canPrint && ['draft', 'in_edit', 'awaiting_validation'].includes(exam.status)) {
+      const publishButton = document.createElement('button');
+      publishButton.type = 'button';
+      publishButton.className = 'btn btn-primary btn-sm';
+      publishButton.textContent = 'Publicar';
+      publishButton.addEventListener('click', async () => {
+        publishButton.disabled = true;
+        publishButton.textContent = 'Publicando...';
+        try {
+          const validation = await api.request(`/exams/${encodeURIComponent(exam.id)}/validate`);
+          if (validation && validation.is_valid === false) {
+            const details = Array.isArray(validation.differences) && validation.differences.length
+              ? validation.differences.join(' ')
+              : 'A soma das questões não confere com o valor total da prova.';
+            showWorkspaceMessage(`Não foi possível publicar: ${details}`, true);
+            return;
+          }
+          await api.request(`/exams/${encodeURIComponent(exam.id)}/publish`, { method: 'POST' });
+          showWorkspaceMessage(
+            `Prova "${exam.title}" publicada. Ela já está disponível para impressão e correção.`,
+          );
+          const refreshed = await api.request('/exams?page=1&page_size=100');
+          renderExamList(container, normalizeRows(refreshed));
+        } catch (error) {
+          showWorkspaceMessage(error.message || 'Não foi possível publicar a prova.', true);
+        } finally {
+          publishButton.disabled = false;
+          publishButton.textContent = 'Publicar';
+        }
+      });
+      actions.appendChild(publishButton);
+    }
+    if (canPrint && exam.status === 'cancelled') {
+      const restoreButton = document.createElement('button');
+      restoreButton.type = 'button';
+      restoreButton.className = 'btn btn-secondary btn-sm';
+      restoreButton.textContent = 'Reativar';
+      restoreButton.addEventListener('click', async () => {
+        restoreButton.disabled = true;
+        try {
+          await api.request(`/exams/${encodeURIComponent(exam.id)}/restore`, { method: 'POST' });
+          showWorkspaceMessage(
+            `Prova "${exam.title}" reativada como rascunho. Use "Publicar" quando estiver pronta.`,
+          );
+          const refreshed = await api.request('/exams?page=1&page_size=100');
+          renderExamList(container, normalizeRows(refreshed));
+        } catch (error) {
+          showWorkspaceMessage(error.message || 'Não foi possível reativar a prova.', true);
+          restoreButton.disabled = false;
+        }
+      });
+      actions.appendChild(restoreButton);
+    }
     if (canPrint && ['published', 'printed'].includes(exam.status)) {
       const printLink = document.createElement('a');
       printLink.className = 'btn btn-secondary btn-sm';
@@ -341,7 +405,7 @@ function renderExamList(container, exams) {
       printLink.textContent = 'Imprimir prova';
       actions.appendChild(printLink);
     }
-    if (canPrint) {
+    if (canPrint && exam.status !== 'cancelled') {
       const removeButton = document.createElement('button');
       removeButton.type = 'button';
       removeButton.className = 'btn btn-danger btn-sm';
@@ -1118,22 +1182,24 @@ async function loadCreateExamScreen(container, editExamId = null) {
     UI.setLoading(button, true);
     importStatus.hidden = false;
     importStatus.classList.remove('workspace-error');
-    importStatus.textContent = 'Lendo os PDFs e extraindo questões e gabaritos. Aguarde...';
+    importStatus.textContent = 'Enviando o PDF da prova...';
+    const operation = ProgressManager.start({
+      title: `Importação de prova — ${examFile.name}`,
+      subtitle: answerKeyFile ? `Prova + gabarito (${answerKeyFile.name})` : 'Prova em PDF',
+    });
     try {
-      const response = await fetch(`${api.baseURL}/exams/analyze-pdfs`, {
-        method: 'POST',
-        headers: api.accessToken ? { Authorization: 'Bearer ' + api.accessToken } : {},
-        body,
+      const created = await api.uploadForm('/exams/import/pdf', body, {
+        onProgress: ({ loaded, total, percent }) => {
+          operation.setUpload({ loaded, total, percent });
+          importStatus.textContent = `Enviando o PDF da prova... ${percent.toFixed(0)}%`;
+        },
       });
-      const result = await response.json();
-      if (!response.ok) {
-        const detail = Array.isArray(result.detail)
-          ? result.detail.map(item => item.msg).join('; ')
-          : result.detail || result.message;
-        const errorMessage = [result.message, detail]
-          .filter((message, index, messages) => message && messages.indexOf(message) === index)
-          .join(' ');
-        throw new Error(errorMessage || 'Não foi possível ler os PDFs.');
+      operation.setStep('PDF recebido. Analisando com a IA...');
+      importStatus.textContent = 'PDF recebido. Analisando com a IA...';
+      const job = await operation.followJob(created.job_id);
+      const result = job.result;
+      if (!result || !Array.isArray(result.questions)) {
+        throw new Error('A análise não retornou questões. Tente novamente com outro PDF.');
       }
 
       form.elements.title.value = result.title;
@@ -1187,6 +1253,7 @@ async function loadCreateExamScreen(container, editExamId = null) {
       ].join(' ');
       form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) {
+      operation.fail(error.message || 'Não foi possível ler os PDFs.');
       importStatus.classList.add('workspace-error');
       importStatus.textContent = error.message || 'Não foi possível ler os PDFs.';
     } finally {
@@ -1695,6 +1762,10 @@ async function loadUploadExamsScreen(container) {
     }
   });
 
+  // Arquivos enviados com sucesso ficam guardados para que uma nova tentativa
+  // não reenvie o que já foi recebido pelo servidor.
+  const uploadedByFile = new Map();
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const files = [...form.elements.files.files];
@@ -1710,9 +1781,27 @@ async function loadUploadExamsScreen(container) {
     }
 
     UI.setLoading(submitButton, true);
+    const studentLabel = selectedStudent.user?.full_name || selectedStudent.ra || 'aluno';
+    const operation = ProgressManager.start({
+      title: `Prova de ${studentLabel}`,
+      subtitle: `${files.length} arquivo(s) — ${selectedVersion.title}`,
+    });
+    const transfer = new Map();
+    const fileIds = files.map((file, index) => `f${index}-${file.name}`);
+    files.forEach((file, index) => operation.trackFile(fileIds[index], { name: file.name, size: file.size }));
+
+    const updateAggregate = () => {
+      let loaded = 0;
+      let total = 0;
+      for (const entry of transfer.values()) {
+        loaded += entry.loaded;
+        total += entry.total;
+      }
+      if (total > 0) operation.setUpload({ loaded, total, percent: (loaded / total) * 100 });
+    };
+
     let submission = null;
     try {
-      showWorkspaceMessage('Preparando a submissão...');
       const copies = await api.create(
         `/exams/versions/${encodeURIComponent(selectedVersion.version_id)}/copies?count=1&student_ids=${encodeURIComponent(selectedStudent.id)}`,
         {},
@@ -1720,37 +1809,77 @@ async function loadUploadExamsScreen(container) {
       if (!Array.isArray(copies) || !copies[0]?.id) {
         throw new Error('Não foi possível criar a cópia vinculada ao aluno.');
       }
+      const copyId = copies[0].id;
 
-      const body = new FormData();
-      body.append('copy_id', copies[0].id);
-      for (const file of files) body.append('files', file);
-      submission = await api.request('/exams/submissions', { method: 'POST', body });
+      const uploaded = [];
+      let failedFiles = 0;
+      operation.setStep('Enviando arquivos da prova');
+      for (const [index, file] of files.entries()) {
+        const fileId = fileIds[index];
+        const done = uploadedByFile.get(file);
+        if (done) {
+          uploaded.push(done);
+          operation.setFileState(fileId, 'done', 100);
+          continue;
+        }
+        operation.setFileState(fileId, 'uploading', 0);
+        transfer.set(fileId, { loaded: 0, total: file.size });
+        const body = new FormData();
+        body.append('copy_id', copyId);
+        body.append('file', file);
+        try {
+          const result = await api.uploadForm('/exams/uploads', body, {
+            onProgress: ({ loaded, total }) => {
+              transfer.set(fileId, { loaded, total });
+              operation.setFileState(fileId, 'uploading', (loaded / total) * 100);
+              updateAggregate();
+            },
+          });
+          uploadedByFile.set(file, result);
+          uploaded.push(result);
+          transfer.set(fileId, { loaded: file.size, total: file.size });
+          operation.setFileState(fileId, 'done', 100);
+          updateAggregate();
+        } catch (error) {
+          failedFiles += 1;
+          operation.setFileState(fileId, 'failed', null, error.message);
+        }
+      }
 
-      showWorkspaceMessage('Prova enviada. Iniciando leitura das respostas...');
-      const ocrResult = await api.create(`/exams/submissions/${submission.id}/process-ocr`, {});
-      if (ocrResult.answers_extracted === 0) {
+      if (failedFiles > 0) {
         throw new Error(
-          'A prova foi recebida, mas o OCR não identificou respostas numeradas. Confira a legibilidade e a numeração das questões.',
+          `${failedFiles} arquivo(s) falharam. Corrija o problema e envie novamente: apenas os arquivos com erro serão reenviados.`,
         );
       }
 
-      showWorkspaceMessage('Respostas identificadas. Comparando com o gabarito publicado...');
-      const correction = await api.create('/ai/batch-correct', { submission_id: submission.id });
-      if (correction.total_processed === 0 && correction.failed === 0) {
-        throw new Error('A prova foi recebida, mas não foram encontradas respostas legíveis para corrigir.');
-      }
-      showWorkspaceMessage(
-        `Correção iniciada para ${selectedStudent.user.full_name}: ${correction.total_processed} questão(ões) processada(s), ${correction.requires_review_count} aguardando conferência, ${correction.skipped} sem resposta reconhecida e ${correction.failed} falha(s).`,
+      operation.setStep('Montando a submissão');
+      submission = await api.request('/exams/submissions/from-uploads', {
+        method: 'POST',
+        body: { copy_id: copyId, uploads: uploaded, student_id: selectedStudent.id },
+      });
+
+      operation.setStep('Iniciando leitura e correção');
+      const created = await api.request(
+        `/exams/submissions/${encodeURIComponent(submission.id)}/correction-jobs`,
+        { method: 'POST' },
       );
+      const job = await operation.followJob(created.job_id);
+      const summary = job.result || {};
+      showWorkspaceMessage(
+        `Correção de ${studentLabel} concluída: ${summary.corrected || 0} questão(ões) corrigida(s), `
+        + `${summary.requires_review || 0} aguardando revisão do professor`
+        + (summary.failed ? `, ${summary.failed} com falha.` : '.'),
+      );
+      uploadedByFile.clear();
       form.reset();
       studentSelect.disabled = true;
       submitButton.disabled = true;
     } catch (error) {
       const message = error.message || 'Não foi possível enviar e corrigir a prova.';
-      if (submission) {
-        form.reset();
-        studentSelect.disabled = true;
-        submitButton.disabled = true;
+      if (error.cancelled) {
+        operation.cancel();
+      } else {
+        operation.fail(message);
       }
       showWorkspaceMessage(
         submission
@@ -1758,9 +1887,11 @@ async function loadUploadExamsScreen(container) {
           : message,
         true,
       );
+      // Mantém os arquivos selecionados para permitir reenviar apenas os que falharam.
+      submitButton.disabled = false;
     } finally {
       UI.setLoading(submitButton, false);
-      submitButton.disabled = Boolean(submission) || !versionSelect.value || !studentSelect.value;
+      if (submission) submitButton.disabled = true;
     }
   });
 
@@ -1931,8 +2062,52 @@ async function loadPrintExamsScreen(container) {
 }
 
 async function loadQualityScreen(container) {
-  const summary = await api.request('/quality/summary');
   container.replaceChildren();
+
+  const actions = document.createElement('section');
+  actions.className = 'card';
+  actions.innerHTML = `
+    <h2 class="card-title">Gerar relatório de cobertura</h2>
+    <p>Executa a suíte completa (pytest + pytest-cov) no servidor em segundo plano e publica o
+    relatório HTML detalhado. Acompanhe as etapas no painel de progresso; pode minimizar.</p>
+    <pre class="workspace-command">python -m pytest tests -q --cov=backend/app \\
+  --cov-report=html:reports/coverage \\
+  --cov-report=xml:reports/coverage.xml \\
+  --junitxml=reports/junit.xml --cov-fail-under=80</pre>
+    <div class="workspace-form-actions">
+      <button class="btn btn-primary" type="button" id="run-quality">Executar testes agora</button>
+      <a class="btn btn-secondary" href="/api/v1/quality/report/index.html" target="_blank" rel="noopener">Abrir último relatório HTML</a>
+    </div>
+  `;
+  container.appendChild(actions);
+
+  const runButton = actions.querySelector('#run-quality');
+  runButton.addEventListener('click', async () => {
+    runButton.disabled = true;
+    const operation = ProgressManager.start({
+      title: 'Testes e cobertura',
+      subtitle: 'pytest + pytest-cov',
+      cancelable: false,
+    });
+    try {
+      const created = await api.request('/quality/run', { method: 'POST' });
+      operation.setStep('Executando a suíte de testes...');
+      const job = await operation.followJob(created.job_id);
+      showWorkspaceMessage(job.message || 'Relatório de cobertura atualizado.');
+      await loadQualityScreen(container);
+    } catch (error) {
+      operation.fail(error.message || 'Não foi possível executar os testes.');
+      showWorkspaceMessage(
+        error.status === 409
+          ? 'Já existe uma execução em andamento. Aguarde a conclusão.'
+          : error.message || 'Não foi possível executar os testes.',
+        true,
+      );
+      runButton.disabled = false;
+    }
+  });
+
+  const summary = await api.request('/quality/summary');
   const history = Array.isArray(summary.history) ? summary.history : [];
   if (!summary.available && history.length === 0) {
     showWorkspaceMessage(summary.message || 'Dados de qualidade indisponíveis.', true);
@@ -2712,6 +2887,9 @@ async function loadWorkspaceScreen() {
   }
   document.getElementById('workspace-home').href = Auth.dashboardPath();
 
+  // Retoma operações em andamento (ex.: página recarregada durante a correção).
+  if (typeof ProgressManager !== 'undefined') ProgressManager.resumeActive();
+
   if (screen.message) showWorkspaceMessage(screen.message);
 
   if (window.location.pathname === '/admin/users.html') {
@@ -2807,6 +2985,46 @@ async function loadWorkspaceScreen() {
 
   if (screen.uploadExams) {
     await loadUploadExamsScreen(content);
+    return;
+  }
+
+  if (screen.myAttendance) {
+    try {
+      await loadStudentAttendanceScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar a frequência.', true);
+    }
+    return;
+  }
+
+  if (screen.mySchedule) {
+    try {
+      await loadStudentScheduleScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar a grade horária.', true);
+    }
+    return;
+  }
+
+  if (screen.storageUsage) {
+    try {
+      await loadStorageUsageScreen(content);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível carregar o armazenamento.', true);
+    }
+    return;
+  }
+
+  if (screen.importKind) {
+    try {
+      await loadImportScreen(content, screen.importKind);
+    } catch (error) {
+      content.replaceChildren();
+      showWorkspaceMessage(error.message || 'Não foi possível importar os dados.', true);
+    }
     return;
   }
 
@@ -3410,3 +3628,530 @@ async function loadTeacherStudentsScreen(container) {
 }
 
 document.addEventListener('DOMContentLoaded', loadWorkspaceScreen);
+
+/* ==================== Importação de alunos e notas ==================== */
+
+const IMPORT_HELP = {
+  students: {
+    columns: 'nome; email; usuario; senha; ra; matricula',
+    example: 'Maria Souza;maria.souza@escola.edu.br;maria.souza;SenhaForte123;RA2026001;20261001',
+    template: 'modelo_alunos.csv',
+    next: 'Depois de importar, os alunos já aparecem na turma e podem acessar o portal.',
+  },
+  grades: {
+    columns: 'ra; avaliacao; nota',
+    example: 'RA123456;A1 — Validação;8,5',
+    template: 'modelo_notas.csv',
+    next: 'As notas entram como rascunho; publique-as na tela "Lançar notas".',
+  },
+};
+
+function renderImportSummary(container, job, kind) {
+  const summary = job.result || {};
+  container.replaceChildren();
+
+  const grid = createSummaryGrid([
+    { label: 'Registros no arquivo', value: String(summary.total_rows ?? summary.processed ?? 0) },
+    { label: 'Importados', value: String(summary.imported ?? 0) },
+    { label: 'Duplicados', value: String(summary.duplicated ?? 0) },
+    { label: 'Ignorados', value: String(summary.skipped ?? 0) },
+    { label: 'Com erro', value: String(summary.failed ?? 0) },
+  ]);
+  container.appendChild(grid);
+
+  const message = document.createElement('p');
+  message.className = 'workspace-import-message';
+  message.textContent = job.message || 'Importação concluída.';
+  container.appendChild(message);
+
+  const errors = Array.isArray(summary.errors) ? summary.errors : [];
+  if (errors.length > 0) {
+    const heading = document.createElement('h3');
+    heading.textContent = `Registros que precisam de atenção (${errors.length})`;
+    container.appendChild(heading);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'workspace-table-wrap';
+    const table = document.createElement('table');
+    table.innerHTML = '<thead><tr><th>Linha</th><th>Motivo</th><th>Situação</th></tr></thead>';
+    const body = document.createElement('tbody');
+    for (const error of errors) {
+      const row = document.createElement('tr');
+      const line = document.createElement('td');
+      line.textContent = String(error.row ?? '—');
+      const reason = document.createElement('td');
+      reason.textContent = error.message || 'Erro não detalhado';
+      const kindCell = document.createElement('td');
+      kindCell.textContent = {
+        duplicated: 'Duplicado',
+        skipped: 'Ignorado',
+        error: 'Erro',
+      }[error.kind] || 'Erro';
+      row.append(line, reason, kindCell);
+      body.appendChild(row);
+    }
+    table.appendChild(body);
+    wrap.appendChild(table);
+    container.appendChild(wrap);
+  }
+
+  const tips = document.createElement('p');
+  tips.className = 'workspace-empty-state';
+  tips.textContent = IMPORT_HELP[kind].next;
+  container.appendChild(tips);
+}
+
+async function loadImportScreen(container, kind) {
+  const help = IMPORT_HELP[kind];
+  if (!help) throw new Error('Tipo de importação desconhecido.');
+
+  const section = document.createElement('section');
+  section.innerHTML = `
+    <div class="workspace-import-help">
+      <p><strong>Colunas do CSV:</strong> <code>${help.columns}</code></p>
+      <p><strong>Exemplo:</strong> <code>${help.example}</code></p>
+      <p>Use <code>;</code> ou <code>,</code> como separador e salve em UTF-8. O cabeçalho é obrigatório.</p>
+    </div>
+    <form class="workspace-form" id="import-form">
+      <div class="form-group">
+        <label class="form-label" for="import-class">Turma</label>
+        <select class="form-input" id="import-class" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="import-file">Arquivo CSV</label>
+        <input class="form-input" id="import-file" name="file" type="file" accept=".csv,text/csv" required>
+      </div>
+      <div class="workspace-form-actions">
+        <button class="btn btn-primary" type="submit">Importar</button>
+        <button class="btn btn-secondary" type="button" id="import-template">Baixar modelo CSV</button>
+      </div>
+    </form>
+    <div id="import-result" aria-live="polite"></div>
+  `;
+  const oldContent = container;
+  oldContent.replaceChildren(section);
+  const form = section.querySelector('#import-form');
+  const classSelect = section.querySelector('#import-class');
+  const resultContainer = section.querySelector('#import-result');
+  const submitButton = form.querySelector('button[type="submit"]');
+
+  section.querySelector('#import-template').addEventListener('click', async () => {
+    try {
+      await api.download(`/imports/templates/${kind}.csv`, help.template);
+    } catch (error) {
+      showWorkspaceMessage(error.message || 'Não foi possível baixar o modelo.', true);
+    }
+  });
+
+  const isTeacher = State.hasRole('teacher') && !State.hasRole('admin');
+  const endpoint = isTeacher
+    ? '/academic/classes/my?page=1&page_size=100'
+    : '/academic/classes?page=1&page_size=100';
+  const classes = normalizeRows(await api.request(endpoint));
+  classSelect.replaceChildren(new Option('Selecione uma turma...', ''));
+  for (const classRecord of classes) {
+    classSelect.add(
+      new Option(
+        `${classRecord.code} — ${classRecord.name} (${classRecord.subject?.name || 'sem disciplina'})`,
+        classRecord.id,
+      ),
+    );
+  }
+  if (classes.length === 0) {
+    submitButton.disabled = true;
+    showWorkspaceMessage('Nenhuma turma autorizada para importar.', true);
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const file = form.querySelector('#import-file').files[0];
+    const classId = classSelect.value;
+    if (!file || !classId) {
+      showWorkspaceMessage('Selecione a turma e o arquivo CSV.', true);
+      return;
+    }
+
+    submitButton.disabled = true;
+    resultContainer.replaceChildren();
+    const operation = ProgressManager.start({
+      title: kind === 'students' ? 'Importação de alunos' : 'Importação de notas',
+      subtitle: file.name,
+    });
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      body.append('class_id', classId);
+      const created = await api.uploadForm(`/imports/${kind}`, body, {
+        onProgress: ({ loaded, total, percent }) =>
+          operation.setUpload({ loaded, total, percent }),
+      });
+      operation.setStep('Arquivo recebido. Processando registros...');
+      const job = await operation.followJob(created.job_id);
+      renderImportSummary(resultContainer, job, kind);
+      showWorkspaceMessage(job.message || 'Importação concluída.');
+      form.querySelector('#import-file').value = '';
+    } catch (error) {
+      operation.fail(error.message || 'Não foi possível concluir a importação.');
+      const failure = document.createElement('p');
+      failure.className = 'workspace-import-message is-error';
+      failure.textContent = error.message || 'Não foi possível concluir a importação.';
+      resultContainer.replaceChildren(failure);
+      showWorkspaceMessage(error.message || 'Não foi possível importar os dados.', true);
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+}
+
+/* ==================== Consultas do aluno ==================== */
+
+const WEEK_DAYS = [
+  { label: 'Segunda-feira', tokens: ['seg', 'segunda'] },
+  { label: 'Terça-feira', tokens: ['ter', 'terca', 'terça'] },
+  { label: 'Quarta-feira', tokens: ['qua', 'quarta'] },
+  { label: 'Quinta-feira', tokens: ['qui', 'quinta'] },
+  { label: 'Sexta-feira', tokens: ['sex', 'sexta'] },
+  { label: 'Sábado', tokens: ['sab', 'sáb', 'sabado', 'sábado'] },
+  { label: 'Domingo', tokens: ['dom', 'domingo'] },
+];
+
+function formatFileSize(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let unit = 'B';
+  for (const candidate of units) {
+    if (size < 1024) break;
+    size /= 1024;
+    unit = candidate;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${unit}`;
+}
+
+function parseSchedule(schedule) {
+  const text = String(schedule || '').trim();
+  if (!text) return { days: [], time: '' };
+  const match = text.match(/^(?<days>[^0-9]+?)\s*(?<time>\d{1,2}:\d{2}.*)$/);
+  if (!match?.groups) return { days: [], time: text };
+  const days = match.groups.days
+    .split(/[\/,;|-]+/)
+    .map(token => token.trim().toLowerCase())
+    .filter(Boolean)
+    .map(token => {
+      const found = WEEK_DAYS.find(day => day.tokens.includes(token));
+      return found ? found.label : token;
+    });
+  return { days, time: match.groups.time.trim() };
+}
+
+function formatPercentage(value) {
+  const number = Number.parseFloat(value);
+  return Number.isFinite(number) ? `${number.toFixed(1)}%` : '—';
+}
+
+function createSummaryGrid(items) {
+  const grid = document.createElement('div');
+  grid.className = 'workspace-summary-grid';
+  for (const item of items) {
+    const card = document.createElement('article');
+    card.className = 'workspace-summary-card';
+    const value = document.createElement('strong');
+    value.textContent = item.value;
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    card.append(value, label);
+    grid.appendChild(card);
+  }
+  return grid;
+}
+
+function createEmptyState(message) {
+  const paragraph = document.createElement('p');
+  paragraph.className = 'workspace-empty-state';
+  paragraph.textContent = message;
+  return paragraph;
+}
+
+async function loadStudentAttendanceScreen(container) {
+  const summaries = await api.request('/academic/attendance/my');
+  const list = Array.isArray(summaries) ? summaries : [];
+  container.replaceChildren();
+  if (list.length === 0) {
+    container.appendChild(
+      createEmptyState('Você não possui matrículas ativas para exibir a frequência.'),
+    );
+    showWorkspaceMessage('Nenhuma matrícula ativa encontrada.');
+    return;
+  }
+
+  const totals = list.reduce(
+    (accumulator, item) => ({
+      classes: accumulator.classes + Number(item.total_classes || 0),
+      present: accumulator.present + Number(item.present_count || 0),
+      absent: accumulator.absent + Number(item.absent_count || 0),
+      justified: accumulator.justified + Number(item.justified_count || 0),
+    }),
+    { classes: 0, present: 0, absent: 0, justified: 0 },
+  );
+  const overall = totals.classes > 0 ? (totals.present / totals.classes) * 100 : 0;
+
+  container.appendChild(
+    createSummaryGrid([
+      { label: 'Frequência geral', value: formatPercentage(overall) },
+      { label: 'Aulas registradas', value: String(totals.classes) },
+      { label: 'Presenças', value: String(totals.present) },
+      { label: 'Faltas', value: String(totals.absent) },
+      { label: 'Faltas justificadas', value: String(totals.justified) },
+    ]),
+  );
+
+  for (const summary of list) {
+    const section = document.createElement('section');
+    section.className = 'workspace-attendance-card';
+
+    const header = document.createElement('div');
+    header.className = 'workspace-exam-card-header';
+    const title = document.createElement('div');
+    const heading = document.createElement('h2');
+    heading.className = 'workspace-exam-title';
+    heading.textContent = summary.subject_name || summary.class_name;
+    const context = document.createElement('p');
+    context.className = 'workspace-exam-context';
+    context.textContent = `${summary.class_code} — ${summary.class_name}`;
+    title.append(heading, context);
+    const badge = document.createElement('span');
+    badge.className = 'workspace-exam-status';
+    badge.textContent = formatPercentage(summary.percentage);
+    header.append(title, badge);
+    section.appendChild(header);
+
+    const details = document.createElement('dl');
+    details.className = 'workspace-exam-details';
+    const detailValues = [
+      ['Aulas', String(summary.total_classes ?? 0)],
+      ['Presenças', String(summary.present_count ?? 0)],
+      ['Faltas', String(summary.absent_count ?? 0)],
+      ['Justificadas', String(summary.justified_count ?? 0)],
+    ];
+    for (const [term, value] of detailValues) {
+      const wrapper = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = term;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      wrapper.append(dt, dd);
+      details.appendChild(wrapper);
+    }
+    section.appendChild(details);
+
+    const records = Array.isArray(summary.records) ? summary.records : [];
+    if (records.length === 0) {
+      section.appendChild(
+        createEmptyState('Ainda não há chamadas registradas para esta turma.'),
+      );
+    } else {
+      const wrap = document.createElement('div');
+      wrap.className = 'workspace-table-wrap';
+      const table = document.createElement('table');
+      table.innerHTML = `
+        <thead>
+          <tr><th>Data</th><th>Situação</th><th>Justificativa</th></tr>
+        </thead>
+      `;
+      const body = document.createElement('tbody');
+      for (const record of [...records].reverse()) {
+        const row = document.createElement('tr');
+        const dateCell = document.createElement('td');
+        dateCell.textContent = record.date || '—';
+        const statusCell = document.createElement('td');
+        if (record.is_present) {
+          statusCell.textContent = 'Presente';
+        } else if (record.justified) {
+          statusCell.textContent = 'Falta justificada';
+        } else {
+          statusCell.textContent = 'Falta';
+        }
+        const justificationCell = document.createElement('td');
+        justificationCell.textContent = record.justification || '—';
+        row.append(dateCell, statusCell, justificationCell);
+        body.appendChild(row);
+      }
+      table.appendChild(body);
+      wrap.appendChild(table);
+      section.appendChild(wrap);
+    }
+
+    container.appendChild(section);
+  }
+
+  showWorkspaceMessage(
+    `Frequência de ${list.length} matrícula(s) ativa(s): ${formatPercentage(overall)} de presença.`,
+  );
+}
+
+async function loadStudentScheduleScreen(container) {
+  const items = await api.request('/academic/schedule/my');
+  const schedule = Array.isArray(items) ? items : [];
+  container.replaceChildren();
+  if (schedule.length === 0) {
+    container.appendChild(createEmptyState('Nenhuma turma ativa vinculada ao seu perfil.'));
+    showWorkspaceMessage('Nenhuma turma encontrada.');
+    return;
+  }
+
+  const weekly = new Map(WEEK_DAYS.map(day => [day.label, []]));
+  for (const item of schedule) {
+    const parsed = parseSchedule(item.schedule);
+    for (const day of parsed.days) {
+      if (!weekly.has(day)) weekly.set(day, []);
+      weekly.get(day).push({ item, time: parsed.time });
+    }
+  }
+
+  const weekSection = document.createElement('section');
+  const weekTitle = document.createElement('h2');
+  weekTitle.textContent = 'Grade semanal';
+  weekSection.appendChild(weekTitle);
+  const weekGrid = document.createElement('div');
+  weekGrid.className = 'workspace-week-grid';
+  for (const [day, entries] of weekly) {
+    const column = document.createElement('article');
+    column.className = 'workspace-week-day';
+    const heading = document.createElement('h3');
+    heading.textContent = day;
+    column.appendChild(heading);
+    if (entries.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'workspace-empty-state';
+      empty.textContent = 'Sem aulas';
+      column.appendChild(empty);
+    }
+    for (const entry of entries) {
+      const slot = document.createElement('div');
+      slot.className = 'workspace-week-slot';
+      const time = document.createElement('strong');
+      time.textContent = entry.time || 'Horário não informado';
+      const subject = document.createElement('span');
+      subject.textContent = entry.item.subject_name || entry.item.class_name;
+      const room = document.createElement('span');
+      room.textContent = [entry.item.classroom, entry.item.teacher_name]
+        .filter(Boolean)
+        .join(' · ');
+      slot.append(time, subject, room);
+      column.appendChild(slot);
+    }
+    weekGrid.appendChild(column);
+  }
+  weekSection.appendChild(weekGrid);
+  container.appendChild(weekSection);
+
+  const detailSection = document.createElement('section');
+  const detailTitle = document.createElement('h2');
+  detailTitle.textContent = 'Detalhes das turmas';
+  detailSection.appendChild(detailTitle);
+  const wrap = document.createElement('div');
+  wrap.className = 'workspace-table-wrap';
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Disciplina</th><th>Turma</th><th>Horário</th>
+        <th>Professor</th><th>Sala</th><th>Período</th>
+      </tr>
+    </thead>
+  `;
+  const body = document.createElement('tbody');
+  for (const item of schedule) {
+    const row = document.createElement('tr');
+    const values = [
+      item.subject_name || '—',
+      `${item.class_code} — ${item.class_name}`,
+      item.schedule || 'A definir',
+      item.teacher_name || '—',
+      item.classroom || '—',
+      item.period_name || `${item.semester}º semestre de ${item.year}`,
+    ];
+    for (const value of values) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    }
+    body.appendChild(row);
+  }
+  table.appendChild(body);
+  wrap.appendChild(table);
+  detailSection.appendChild(wrap);
+  container.appendChild(detailSection);
+
+  showWorkspaceMessage(`${schedule.length} turma(s) na sua grade horária.`);
+}
+
+/* ==================== Administração ==================== */
+
+async function loadStorageUsageScreen(container) {
+  const usage = await api.request('/admin/settings/storage');
+  const folders = Array.isArray(usage.folders) ? usage.folders : [];
+  container.replaceChildren();
+
+  container.appendChild(
+    createSummaryGrid([
+      { label: 'Total utilizado', value: formatFileSize(usage.total_bytes) },
+      {
+        label: 'Banco de dados',
+        value: formatFileSize(usage.database_bytes),
+      },
+      {
+        label: 'Espaço livre em disco',
+        value: usage.free_bytes === null ? '—' : formatFileSize(usage.free_bytes),
+      },
+      { label: 'Pastas monitoradas', value: String(folders.length) },
+    ]),
+  );
+
+  const wrap = document.createElement('div');
+  wrap.className = 'workspace-table-wrap';
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead>
+      <tr><th>Pasta</th><th>Arquivos</th><th>Tamanho</th><th>Caminho</th></tr>
+    </thead>
+  `;
+  const body = document.createElement('tbody');
+  for (const folder of folders) {
+    const row = document.createElement('tr');
+    const labelCell = document.createElement('td');
+    labelCell.textContent = folder.label;
+    const countCell = document.createElement('td');
+    countCell.textContent = folder.exists ? String(folder.file_count) : 'Pasta ausente';
+    const sizeCell = document.createElement('td');
+    sizeCell.textContent = formatFileSize(folder.total_bytes);
+    const pathCell = document.createElement('td');
+    pathCell.className = 'workspace-path-cell';
+    pathCell.textContent = folder.path;
+    row.append(labelCell, countCell, sizeCell, pathCell);
+    body.appendChild(row);
+  }
+  if (usage.database_path) {
+    const row = document.createElement('tr');
+    const labelCell = document.createElement('td');
+    labelCell.textContent = 'Banco de dados (SQLite)';
+    const countCell = document.createElement('td');
+    countCell.textContent = '1';
+    const sizeCell = document.createElement('td');
+    sizeCell.textContent = formatFileSize(usage.database_bytes);
+    const pathCell = document.createElement('td');
+    pathCell.className = 'workspace-path-cell';
+    pathCell.textContent = usage.database_path;
+    row.append(labelCell, countCell, sizeCell, pathCell);
+    body.appendChild(row);
+  }
+  table.appendChild(body);
+  wrap.appendChild(table);
+  container.appendChild(wrap);
+
+  showWorkspaceMessage(
+    `Uso total de ${formatFileSize(usage.total_bytes)} em ${folders.length} pasta(s).`,
+  );
+}
+

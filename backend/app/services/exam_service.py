@@ -1,11 +1,13 @@
 """Service de Provas, Questões, Impressão e Submissões."""
 
+import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
 from backend.app.core.exceptions import (
     AuthorizationError,
     ConflictError,
@@ -58,6 +60,8 @@ from backend.app.schemas.exam import (
     SubmissionCreate,
     SubmissionPageCreate,
 )
+
+logger = logging.getLogger("edugrade.exams")
 
 
 class ExamService:
@@ -215,6 +219,26 @@ class ExamService:
             "Exam",
             exam.id,
             new_values={"status": ExamStatus.CANCELLED.value},
+        )
+        self.db.flush()
+        return exam
+
+    def restore(self, exam_id: UUID, restored_by: UUID) -> Exam:
+        """Reativa uma prova cancelada, devolvendo-a como rascunho."""
+        exam = self.get(exam_id)
+        self._assert_can_manage(exam, restored_by)
+        if exam.status != ExamStatus.CANCELLED:
+            return exam
+
+        exam.status = ExamStatus.DRAFT
+        exam.updated_at = datetime.now(UTC)
+        self.audit_repo.log(
+            AuditActionType.UPDATE,
+            f"Prova reativada: {exam.title}",
+            restored_by,
+            "Exam",
+            exam.id,
+            new_values={"status": ExamStatus.DRAFT.value},
         )
         self.db.flush()
         return exam
@@ -467,7 +491,7 @@ class ExamCopyService:
             exam=exam,
             version=version,
             copy=copy,
-            output_dir="./storage/exams/pdfs",
+            output_dir=settings.pdf_dir,
         )
 
         copy.pdf_path = pdf_path
@@ -488,7 +512,7 @@ class ExamCopyService:
         pdf_path = self.pdf_gen.generate_teacher_answer_key(
             exam=exam,
             version=version,
-            output_dir="./storage/exams/pdfs",
+            output_dir=settings.pdf_dir,
         )
 
         return pdf_path
@@ -556,49 +580,93 @@ class SubmissionService:
         return created_pages
 
     def process_ocr(self, submission_id: UUID) -> ExamSubmission:
-        """Processa OCR das páginas (integração com serviço de OCR)."""
+        """Processa OCR das páginas, com fallback para a camada de texto do PDF."""
         from backend.app.integrations.ocr.processor import OCRProcessor
+        from backend.app.integrations.ocr.text_layer import extract_answers_from_pdf
 
         submission = self.repo.get_with_pages(submission_id)
         if not submission:
             raise NotFoundError("Submissão não encontrada")
 
-        ocr = OCRProcessor()
         questions = ExamQuestionRepository(self.db).get_by_exam(submission.version.exam_id)
         questions_by_order = {question.question_order: question for question in questions}
 
-        for page in submission.pages:
-            page.extracted_answers.clear()
-            # Processa imagem
-            result = ocr.process_page(page.original_image_path)
-            page.processed_image_path = result.get("processed_path")
-            page.rotation_angle = result.get("rotation", 0)
-            page.perspective_corrected = result.get("perspective_corrected", False)
-            page.ocr_confidence = result.get("confidence")
+        ocr = OCRProcessor()
+        try:
+            for page in submission.pages:
+                page.extracted_answers.clear()
+                result = ocr.process_page(page.original_image_path)
+                page.processed_image_path = result.get("processed_path")
+                page.rotation_angle = result.get("rotation", 0)
+                page.perspective_corrected = result.get("perspective_corrected", False)
+                page.ocr_confidence = result.get("confidence")
 
-            # Extrai respostas por questão
-            for extracted in result.get("extracted_answers", []):
-                question_order = extracted.get("question_order")
-                question = questions_by_order.get(question_order)
-                if not question:
-                    continue
-                answer = ExtractedAnswer(
-                    page_id=page.id,
-                    question_id=question.id,
-                    question_order=question_order,
-                    extracted_text=extracted.get("extracted_text"),
-                    extracted_image_path=extracted.get("image_path"),
-                    ocr_confidence=extracted.get("ocr_confidence"),
-                    bounding_box=extracted.get("bounding_box", {}),
-                )
-                page.extracted_answers.append(answer)
+                for extracted in result.get("extracted_answers", []):
+                    question_order = extracted.get("question_order")
+                    question = questions_by_order.get(question_order)
+                    if not question:
+                        continue
+                    page.extracted_answers.append(
+                        ExtractedAnswer(
+                            page_id=page.id,
+                            question_id=question.id,
+                            question_order=question_order,
+                            extracted_text=extracted.get("extracted_text"),
+                            extracted_image_path=extracted.get("image_path"),
+                            ocr_confidence=extracted.get("ocr_confidence"),
+                            bounding_box=extracted.get("bounding_box", {}),
+                        )
+                    )
+        except Exception as ocr_error:
+            # Sem Tesseract (ou com imagem ilegível), tenta o texto embutido no PDF.
+            answers = self._answers_from_pdf_text_layer(submission, questions_by_order)
+            if not answers:
+                raise
+            logger.info(
+                "OCR indisponível para a submissão %s (%s); respostas lidas do texto do PDF.",
+                submission_id,
+                ocr_error,
+            )
 
         submission.status = SubmissionStatus.PROCESSED
         submission.processed_at = datetime.now(UTC)
-        submission.processed_files = [p.processed_image_path for p in submission.pages if p.processed_image_path]
+        submission.processed_files = [
+            p.processed_image_path or p.original_image_path for p in submission.pages
+        ]
         self.db.flush()
 
         return submission
+
+    def _answers_from_pdf_text_layer(
+        self,
+        submission: ExamSubmission,
+        questions_by_order: dict[int, ExamQuestion],
+    ) -> list[ExtractedAnswer]:
+        """Cria respostas a partir do texto do PDF original (sem OCR)."""
+        from backend.app.integrations.ocr.text_layer import extract_answers_from_pdf
+
+        if not submission.pages:
+            return []
+
+        first_page = submission.pages[0]
+        first_page.extracted_answers.clear()
+        created: list[ExtractedAnswer] = []
+        for original_file in submission.original_files or []:
+            for extracted in extract_answers_from_pdf(original_file):
+                question = questions_by_order.get(extracted["question_order"])
+                if question is None:
+                    continue
+                answer = ExtractedAnswer(
+                    page_id=first_page.id,
+                    question_id=question.id,
+                    question_order=extracted["question_order"],
+                    extracted_text=extracted["extracted_text"],
+                    ocr_confidence=extracted["ocr_confidence"],
+                    bounding_box={"source": "pdf_text_layer"},
+                )
+                first_page.extracted_answers.append(answer)
+                created.append(answer)
+        return created
 
     def identify_student(
         self,

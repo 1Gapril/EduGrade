@@ -173,9 +173,26 @@ docker run -d -p 8000:8000 --env-file .env edugrade
 
 ### Usuários de Demonstração (criados automaticamente)
 
-O seed contém contas e registros demonstrativos para desenvolvimento. Não
-considere essas contas credenciais administrativas próprias e nunca use o seed
-em um banco com dados reais.
+O seed cria **duas contas para cada perfil** — administrador, professor e aluno —
+e a estrutura acadêmica mínima (curso, duas disciplinas, duas turmas e matrículas).
+
+| Perfil | Contas | Senha |
+|---|---|---|
+| Administrador | `admin`, `admin2` | `admin123` |
+| Professor | `professor`, `professor2` | `prof123` |
+| Aluno | `aluno`, `aluno2` | `aluno123` |
+
+A lista completa (com e-mail, RA, matrícula e turma de cada conta) está em
+[CREDENCIAIS.md](CREDENCIAIS.md).
+
+Para recriar o banco com apenas esses dados:
+
+```cmd
+python scripts\reset_db.py
+```
+
+> Nunca use essas contas em produção: troque as senhas e remova as contas
+> demonstrativas antes de publicar o sistema.
 
 ---
 

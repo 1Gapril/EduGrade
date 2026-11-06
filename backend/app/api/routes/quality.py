@@ -1,24 +1,81 @@
 """Administrative test and coverage quality endpoints."""
 
 import hashlib
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 from xml.etree import ElementTree
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
 from backend.app.core.database import get_db
 from backend.app.core.security import require_admin
+from backend.app.models.operation_job import OperationKind, OperationStatus
 from backend.app.models.quality_run import QualityRun
-from backend.app.models.user import User
+from backend.app.models.user import User, UserRole
+from backend.app.schemas.operation_job import OperationJobCreatedResponse
+from backend.app.services.operation_job_service import OperationJobService
+from backend.app.services.operation_runner import run_quality_job
 
 router = APIRouter(prefix="/quality", tags=["Qualidade"])
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-COVERAGE_XML = PROJECT_ROOT / "reports" / "coverage.xml"
-COVERAGE_HTML = PROJECT_ROOT / "reports" / "coverage"
-JUNIT_XML = PROJECT_ROOT / "reports" / "junit.xml"
+REPORT_TOKEN_PURPOSE = "coverage_report"
+REPORT_TOKEN_TTL_SECONDS = 900
+
+
+def _reports_dir() -> Path:
+    configured = Path(settings.reports_dir)
+    return configured if configured.is_absolute() else PROJECT_ROOT / configured
+
+
+COVERAGE_XML = _reports_dir() / "coverage.xml"
+COVERAGE_HTML = _reports_dir() / "coverage"
+JUNIT_XML = _reports_dir() / "junit.xml"
+
+
+@router.post(
+    "/run",
+    response_model=OperationJobCreatedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_quality_run(
+    background: BackgroundTasks,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Executa a suíte de testes com cobertura em segundo plano."""
+    from backend.app.models.operation_job import OperationJob
+
+    active = (
+        db.query(OperationJob.id)
+        .filter(
+            OperationJob.kind == OperationKind.QUALITY_RUN,
+            OperationJob.status.in_([OperationStatus.PENDING, OperationStatus.RUNNING]),
+        )
+        .first()
+    )
+    if active is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Já existe uma execução de testes em andamento.",
+        )
+
+    jobs = OperationJobService(db)
+    job = jobs.create(
+        kind=OperationKind.QUALITY_RUN,
+        title="Execução dos testes com cobertura",
+        user_id=current_user.id,
+        payload={"reports_dir": str(_reports_dir())},
+        step_key="queued",
+        step_label="Aguardando início",
+    )
+    background.add_task(run_quality_job, job.id)
+    return OperationJobCreatedResponse(job_id=job.id, status=job.status.value)
 
 
 @router.get("/summary")

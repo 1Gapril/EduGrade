@@ -20,6 +20,8 @@ from backend.app.models.academic import (
     AcademicAssignment,
     AcademicPeriod,
     Assessment,
+    Attendance,
+    Course,
     Enrollment,
     EnrollmentStatus,
     Grade,
@@ -62,6 +64,8 @@ from backend.app.schemas.academic import (
     GradeResponse,
     GradeUpdate,
     GradeWithRelations,
+    MyAttendanceSummary,
+    MyScheduleItem,
     SubjectCreate,
     SubjectResponse,
     SubjectUpdate,
@@ -537,6 +541,194 @@ def set_current_period(
 ):
     service = AcademicPeriodService(db)
     return service.set_current(period_id, current_user.id)
+
+
+# ==================== Consultas do usuário autenticado ====================
+
+def _serialize_period(period: AcademicPeriod | None) -> dict | None:
+    if period is None:
+        return None
+    return {
+        "id": str(period.id),
+        "name": period.name,
+        "code": period.code,
+        "start_date": period.start_date.isoformat(),
+        "end_date": period.end_date.isoformat(),
+        "status": period.status,
+        "is_current": period.is_current,
+    }
+
+
+@router.get("/my-profile")
+def get_my_academic_profile(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Perfil acadêmico do usuário autenticado.
+
+    Alunos recebem curso, turma e matrículas; professores recebem as
+    disciplinas e turmas autorizadas; administradores recebem o setor.
+    """
+    current_period = db.query(AcademicPeriod).filter(
+        AcademicPeriod.is_current.is_(True)
+    ).first()
+    payload: dict = {
+        "user": {
+            "id": str(current_user.id),
+            "username": current_user.username,
+            "email": current_user.email,
+            "full_name": current_user.full_name,
+            "role": current_user.role,
+        },
+        "role": current_user.role,
+        "current_period": _serialize_period(current_period),
+        "student": None,
+        "teacher": None,
+        "administrator": None,
+    }
+
+    student = current_user.student_profile
+    if student is not None:
+        course = db.get(Course, student.course_id) if student.course_id else None
+        class_record = db.get(AcademicClass, student.class_id) if student.class_id else None
+        enrollments = (
+            db.query(Enrollment)
+            .filter(
+                Enrollment.student_id == student.id,
+                Enrollment.status == EnrollmentStatus.ACTIVE,
+            )
+            .all()
+        )
+        payload["student"] = {
+            "id": str(student.id),
+            "ra": student.ra,
+            "registration_number": student.registration_number,
+            "status": student.status,
+            "course": (
+                {"id": str(course.id), "code": course.code, "name": course.name}
+                if course is not None
+                else None
+            ),
+            "class": (
+                {
+                    "id": str(class_record.id),
+                    "code": class_record.code,
+                    "name": class_record.name,
+                    "schedule": class_record.schedule,
+                    "classroom": class_record.classroom,
+                }
+                if class_record is not None
+                else None
+            ),
+            "enrollments": [
+                {
+                    "id": str(enrollment.id),
+                    "class_id": str(enrollment.class_id),
+                    "status": enrollment.status,
+                    "final_grade": (
+                        str(enrollment.final_grade)
+                        if enrollment.final_grade is not None
+                        else None
+                    ),
+                    "attendance_percentage": (
+                        str(enrollment.attendance_percentage)
+                        if enrollment.attendance_percentage is not None
+                        else None
+                    ),
+                }
+                for enrollment in enrollments
+            ],
+        }
+
+    teacher = current_user.teacher_profile
+    if teacher is not None:
+        assignments = db.query(AcademicAssignment).filter(
+            AcademicAssignment.teacher_id == teacher.id,
+            AcademicAssignment.is_active.is_(True),
+        ).all()
+        payload["teacher"] = {
+            "id": str(teacher.id),
+            "employee_id": teacher.employee_id,
+            "department": teacher.department,
+            "status": teacher.status,
+            "assignments": [
+                {
+                    "id": str(assignment.id),
+                    "subject_id": str(assignment.subject_id),
+                    "subject_name": assignment.subject.name if assignment.subject else None,
+                    "class_id": str(assignment.class_id),
+                    "class_name": assignment.class_.name if assignment.class_ else None,
+                    "academic_period_id": str(assignment.academic_period_id),
+                }
+                for assignment in assignments
+            ],
+        }
+
+    administrator = current_user.admin_profile
+    if administrator is not None:
+        payload["administrator"] = {
+            "id": str(administrator.id),
+            "employee_id": administrator.employee_id,
+            "department": administrator.department,
+            "permissions": administrator.permissions,
+        }
+
+    return payload
+
+
+@router.get("/schedule/my", response_model=list[MyScheduleItem])
+def get_my_schedule(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Grade horária das turmas em que o usuário autenticado está envolvido."""
+    if current_user.role == UserRole.STUDENT:
+        student = current_user.student_profile
+        if student is None:
+            raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado")
+        classes = (
+            db.query(AcademicClass)
+            .join(Enrollment, Enrollment.class_id == AcademicClass.id)
+            .filter(
+                Enrollment.student_id == student.id,
+                Enrollment.status == EnrollmentStatus.ACTIVE,
+            )
+            .all()
+        )
+    elif current_user.role == UserRole.TEACHER:
+        teacher = current_user.teacher_profile
+        if teacher is None:
+            raise HTTPException(status_code=404, detail="Perfil de professor não encontrado")
+        classes = (
+            db.query(AcademicClass)
+            .filter(AcademicClass.teacher_id == teacher.id, AcademicClass.is_active.is_(True))
+            .all()
+        )
+    else:
+        classes = db.query(AcademicClass).filter(AcademicClass.is_active.is_(True)).all()
+
+    return [
+        MyScheduleItem(
+            class_id=class_record.id,
+            class_code=class_record.code,
+            class_name=class_record.name,
+            subject_name=class_record.subject.name if class_record.subject else "",
+            course_name=class_record.course.name if class_record.course else "",
+            teacher_name=(
+                class_record.teacher.user.full_name if class_record.teacher else None
+            ),
+            schedule=class_record.schedule,
+            classroom=class_record.classroom,
+            semester=class_record.semester,
+            year=class_record.year,
+            period_name=(
+                class_record.academic_period.name
+                if class_record.academic_period is not None
+                else None
+            ),
+        )
+        for class_record in classes
+    ]
 
 
 # ==================== Enrollments ====================
@@ -1163,6 +1355,66 @@ def bulk_create_attendance(
 ):
     service = AttendanceService(db)
     return service.bulk_create(data.class_id, data.class_date, data.attendances, current_user.id)
+
+
+@router.get("/attendance/my", response_model=list[MyAttendanceSummary])
+def list_my_attendance(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Resumo de frequência das matrículas ativas do usuário autenticado."""
+    student = current_user.student_profile
+    if student is None:
+        raise HTTPException(status_code=404, detail="Perfil de aluno não encontrado")
+
+    enrollments = db.query(Enrollment).filter(
+        Enrollment.student_id == student.id,
+        Enrollment.status == EnrollmentStatus.ACTIVE,
+    ).all()
+
+    summaries: list[MyAttendanceSummary] = []
+    for enrollment in enrollments:
+        records = db.query(Attendance).filter(
+            Attendance.enrollment_id == enrollment.id
+        ).order_by(Attendance.class_date).all()
+        total = len(records)
+        present = sum(1 for record in records if record.is_present)
+        justified = sum(1 for record in records if record.justified)
+        absent = total - present
+        percentage = (
+            (Decimal(present) / Decimal(total) * Decimal(100)).quantize(Decimal("0.01"))
+            if total
+            else Decimal("0.00")
+        )
+        class_record = enrollment.class_
+        summaries.append(
+            MyAttendanceSummary(
+                enrollment_id=enrollment.id,
+                class_id=enrollment.class_id,
+                class_code=class_record.code if class_record else "",
+                class_name=class_record.name if class_record else "",
+                subject_name=(
+                    class_record.subject.name
+                    if class_record is not None and class_record.subject is not None
+                    else ""
+                ),
+                total_classes=total,
+                present_count=present,
+                absent_count=absent,
+                justified_count=justified,
+                percentage=percentage,
+                records=[
+                    {
+                        "date": record.class_date,
+                        "is_present": record.is_present,
+                        "justified": record.justified,
+                        "justification": record.justification,
+                    }
+                    for record in records
+                ],
+            )
+        )
+    return summaries
 
 
 @router.get("/attendance/percentage/{enrollment_id}", response_model=Decimal)
