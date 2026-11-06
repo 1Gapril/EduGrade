@@ -1,185 +1,210 @@
-# EduGrade — Sistema de Gestão e Desempenho Acadêmico com Correção Assistida por Inteligência Artificial
+# EduGrade — Documento de Entrega A3
 
 **Trabalho A3 Prático — Gestão e Qualidade de Software (GQS)**
 **Professor:** Daniel Henrique Matos de Paiva
 **ODS 4:** Educação de Qualidade
 
-**Integrantes**
+---
+
+## Integrantes
 
 | Nome | RA | Responsabilidade principal |
 |---|---|---|
-| Fernando Almeida | 326132695 | Desenvolvimento com Claude Code, QA e integração |
+| Fernando Almeida | 326132695 | Desenvolvimento, QA e integração |
 | Lucas Henrique Miranda | 325131396 | Requisitos, regras de negócio e validação funcional |
 | Caio Duraes | 325132875 | Arquitetura, banco de dados e validação técnica |
 | Gabriel Ferreira | 325140970 | GitHub, documentação, DevOps e apresentação |
 
-**Versão:** rascunho 1.0 — 02/11/2026
+**Versão:** 1.2 — 05/11/2026 
 
 ---
 
-## 1. Introdução
+## 1. Entregáveis Obrigatórios
 
-A avaliação da aprendizagem é uma das atividades que mais consomem o tempo do professor e, ao mesmo tempo, uma das que mais impactam o aluno: dela dependem a nota, a aprovação e a percepção de justiça no processo. Em grande parte das instituições, as provas continuam sendo aplicadas em papel, de forma presencial, enquanto a preparação, a correção e o lançamento das notas dependem de planilhas, arquivos soltos e conferências manuais.
-
-O **EduGrade** é uma plataforma acadêmica que mantém a aplicação das provas em papel e presencial, mas digitaliza e apoia todo o restante do processo: o professor monta a prova e o gabarito no sistema, imprime as cópias identificadas, digitaliza as folhas respondidas e recebe sugestões de correção geradas por inteligência artificial (IA). A decisão final é sempre do professor, e a nota só é publicada ao aluno depois de revisada e aprovada.
-
-Este documento apresenta o problema, a justificativa, os objetivos, o público-alvo, os requisitos e a solução proposta, relacionando o projeto à ODS 4. Foi desenvolvido no contexto da disciplina de Gestão e Qualidade de Software, de modo que a **qualidade do processo** (requisitos, regras de negócio, testes, versionamento e integração contínua) é tão importante quanto o produto.
-
-## 2. Problema identificado
-
-1. **Tempo de correção.** A correção manual de provas, principalmente discursivas, é demorada e repetitiva, o que reduz o tempo disponível para planejar aulas e acompanhar os alunos.
-2. **Risco de inconsistência.** Somas de pontos, critérios de correção e aplicação de gabaritos feitos manualmente estão sujeitos a erro e a variação de critério entre provas e entre corretores.
-3. **Falta de rastreabilidade.** Quando uma nota é questionada, nem sempre há registro de qual gabarito foi usado, quem alterou a nota e por quê.
-4. **Demora e pouca transparência para o aluno.** O aluno costuma receber a nota sem acompanhar seu desempenho ao longo do período.
-5. **Dados sensíveis.** Provas e notas são dados pessoais e acadêmicos que exigem controle de acesso, o que ferramentas improvisadas raramente garantem.
-
-## 3. Justificativa
-
-- **Relevância social e institucional:** reduzir a carga operacional do professor e melhorar o retorno ao aluno contribui diretamente para a qualidade do ensino.
-- **Respeito ao contexto real:** o projeto não exige que a escola abandone a prova em papel; ele se adapta ao modelo presencial já existente, o que facilita a adoção.
-- **Uso responsável de IA:** a IA atua como **assistente** (sugere nota e justificativa), nunca como decisora. Essa escolha de projeto responde aos riscos de erro de leitura de manuscritos, de viés e de manipulação por texto escrito na prova.
-- **Relevância para a disciplina de GQS:** o projeto exige requisitos rastreáveis, regras de negócio explícitas, testes automatizados e funcionais, controle de versão, cobertura mínima de testes e integração contínua, ou seja, a aplicação prática dos conceitos de qualidade de software.
-
-## 4. Objetivos
-
-### 4.1 Objetivo geral
-
-Desenvolver e documentar uma plataforma acadêmica integrada (frontend, backend e banco de dados) que permita ao professor criar, imprimir e corrigir provas presenciais com apoio de inteligência artificial, e ao aluno acompanhar o seu desempenho, com qualidade de software comprovada por testes e evidências.
-
-### 4.2 Objetivos específicos
-
-1. Permitir que o professor crie provas, cadastre gabaritos e rubricas e distribua a pontuação livremente, com validação automática da soma.
-2. Garantir que cada prova publicada gere uma versão imutável, preservando a ligação entre a prova aplicada e o gabarito usado.
-3. Gerar a prova em PDF para impressão individual e em lote, com identificação única de cada cópia (QR Code), sem expor o gabarito.
-4. Receber provas digitalizadas e processá-las com leitura de imagens (OCR) e IA, produzindo sugestões de nota com justificativa e indicador de confiança.
-5. Exigir revisão e aprovação do professor antes da publicação de qualquer nota.
-6. Permitir ao aluno consultar apenas as suas próprias notas e o seu histórico.
-7. Registrar em auditoria as operações relevantes.
-8. Demonstrar a qualidade do software por meio de testes unitários e de integração, cobertura mínima de 80%, relatório HTML e pipeline de integração contínua.
-
-## 5. Público-alvo
-
-| Público | Necessidade | Como o EduGrade atende |
-|---|---|---|
-| **Professores** | Reduzir o tempo de correção e manter critérios consistentes | Construtor de provas, gabarito com rubrica, correção sugerida e revisão assistida |
-| **Alunos** | Acompanhar desempenho e receber notas com clareza | Portal de consulta de notas, médias, histórico e situação acadêmica |
-| **Administração acadêmica** | Cadastros, permissões, auditoria e configuração institucional | Painel administrativo, regras acadêmicas configuráveis, auditoria |
-| **Instituição** | Segurança, rastreabilidade e conformidade com a LGPD | Controle de acesso por perfil, auditoria, proteção de arquivos |
-
-## 6. Requisitos
-
-O detalhamento completo está em dois documentos complementares:
-
-- **`REQUISITOS_FUNCIONAIS.md`**: 17 requisitos funcionais definidos pelo grupo (RF01–RF17), mais requisitos adicionais (RF18–RF29) e requisitos não funcionais (RNF01–RNF13).
-- **`REGRAS_DE_NEGOCIO.md`**: 45 regras (RN01–RN45) que definem os limites do comportamento do sistema.
-
-**Resumo dos requisitos principais**
-
-| Área | Requisitos |
-|---|---|
-| Acesso | Login por perfil (aluno, professor, administrador), com controle de permissões no backend |
-| Acadêmico | Cadastro de disciplinas, turmas, matrículas, períodos, notas e frequência; regras de média configuráveis |
-| Provas | Criação de avaliações e provas, cadastro de gabaritos, pontuação com soma validada, versionamento |
-| Impressão | PDF da prova do aluno e do gabarito do professor, impressão individual e em lote, QR Code por cópia |
-| Correção | Envio de provas digitalizadas, correção assistida por IA, revisão do professor, publicação das notas |
-| Governança | Auditoria, proteção de dados, testes e cobertura mínima |
-
-**Regras de negócio mais importantes**
-
-- O aluno **não** faz prova pela plataforma; a prova é presencial, em papel (RN03, RN04).
-- A IA **apenas sugere**; o professor revisa e aprova (RN06, RN07, RN36, RN39).
-- A nota só é publicada após aprovação e só então aparece para o aluno (RN08, RN14).
-- A soma das questões deve igualar o valor total da prova (RN16).
-- A prova mantém a versão do gabarito usada na aplicação (RN09, RN21, RN22).
-- Alterações relevantes geram auditoria (RN10, RN40, RN41).
-
-## 7. Solução proposta
-
-### 7.1 Fluxo geral
-
-1. O professor cria a prova e cadastra as questões.
-2. O professor cadastra e confirma o gabarito e as rubricas.
-3. O sistema calcula e valida a pontuação total.
-4. O professor publica a prova; o sistema salva a **versão oficial imutável**.
-5. O professor imprime as cópias, cada uma com identificador e QR Code próprios.
-6. Os alunos respondem **no papel**, presencialmente.
-7. O professor recolhe e **digitaliza** as folhas e envia ao sistema.
-8. O sistema identifica a prova e o aluno, prepara as imagens e lê as respostas (OCR).
-9. A IA compara as respostas com o gabarito e a rubrica e **sugere** pontuação e justificativa por questão, sinalizando baixa confiança.
-10. O professor **revisa**: aprova, altera, rejeita, pede nova leitura ou marca como ilegível.
-11. O professor aprova e o sistema **publica** a nota oficial.
-12. O aluno consulta o resultado no portal.
-
-### 7.2 Arquitetura
-
-O sistema é organizado em camadas, com separação de responsabilidades:
-
-| Camada | Tecnologia | Papel |
-|---|---|---|
-| Frontend | HTML, CSS e JavaScript | Telas do aluno, professor e administrador |
-| Backend / API | Python com FastAPI | Regras de negócio, autenticação, permissões e serviços |
-| Banco de dados | SQLite com SQLAlchemy | Persistência de usuários, estrutura acadêmica, provas, versões, correções e auditoria |
-| Integrações | PDF, QR Code, OCR e IA | Geração de documentos, identificação, leitura de imagens e sugestão de correção |
-| Qualidade | Pytest, Pytest-Cov e GitHub Actions | Testes, cobertura e integração contínua |
-
-A camada de IA é **independente do provedor**, com adaptadores intercambiáveis (inclusive um adaptador simulado para testes), o que permite usar modelos locais, priorizando a proteção dos dados dos alunos.
-
-### 7.3 Segurança e proteção de dados
-
-Controle de acesso por perfil validado no backend, senhas armazenadas com hash, sessões com expiração, proteção de arquivos privados, validação de uploads, auditoria de operações e política de não enviar dados de alunos a provedores externos sem autorização institucional (LGPD).
-
-### 7.4 Garantia de qualidade
-
-- **Requisitos e regras rastreáveis** (RF e RN com códigos).
-- **Testes unitários e de integração** (Fernando e Caio).
-- **Testes funcionais** com 25 cenários, incluindo tentativas que o sistema deve bloquear (Lucas) — `CHECKLIST_VALIDACAO_FUNCIONAL.md`.
-- **Registro de problemas** — `REGISTRO_PROBLEMAS.md`.
-- **Cobertura mínima de 80%** com relatório HTML e pipeline que falha abaixo da meta.
-- **Versionamento** com GitFlow e commits padronizados (Gabriel).
-
-## 8. Relação com a ODS 4 — Educação de Qualidade
-
-A ODS 4 busca assegurar uma educação inclusiva, equitativa e de qualidade. O EduGrade contribui de forma indireta, mas concreta, ao:
-
-- **Liberar tempo do professor** de tarefas repetitivas para que ele possa dedicá-lo ao ensino e ao acompanhamento dos alunos;
-- **Padronizar critérios de correção** por meio de gabaritos e rubricas, favorecendo avaliações mais justas e consistentes;
-- **Dar transparência ao aluno**, que acompanha suas notas, médias e histórico e pode identificar dificuldades mais cedo;
-- **Manter a avaliação presencial em papel**, sem exigir que o aluno tenha dispositivo ou conexão para fazer a prova, o que reduz barreiras de acesso;
-- **Usar a IA com supervisão humana**, promovendo uma adoção responsável da tecnologia na educação.
-
-> Os efeitos acima são **resultados esperados** do projeto; não há, neste trabalho, medição com usuários reais.
-
-## 9. Resultados esperados
-
-| Dimensão | Resultado esperado |
-|---|---|
-| Para o professor | Menos tempo na conferência e na correção; prova e gabarito organizados e versionados |
-| Para o aluno | Consulta clara e segura das próprias notas e do histórico |
-| Para a instituição | Rastreabilidade das notas, controle de acesso e conformidade com a proteção de dados |
-| Para a disciplina de GQS | Projeto com requisitos, regras, testes (unitários, de integração e funcionais), cobertura ≥ 80%, relatório HTML, versionamento e pipeline de CI/CD, tudo com evidências reais |
-
-## 10. Considerações finais
-
-O EduGrade propõe um uso equilibrado da inteligência artificial na educação: ganhar velocidade e consistência na correção **sem retirar do professor a responsabilidade pela nota**. A decisão de manter a prova em papel e presencial aproxima a solução da realidade das escolas, e a exigência de revisão humana, versionamento e auditoria torna o processo verificável.
-
-Do ponto de vista da Gestão e Qualidade de Software, o projeto mostra que um sistema só pode ser considerado pronto quando suas funcionalidades têm **evidência**: requisito definido, regra de negócio clara, teste executado e resultado registrado. Por isso este documento acompanha os arquivos de requisitos, regras de negócio, checklist de validação funcional e registro de problemas.
-
-### 10.1 Limitações conhecidas
-
-> **Atualizar esta seção antes da entrega**, com base no estado real da versão entregue.
-
-Na revisão do repositório de 01/11/2026 (`docs/QA/`), constavam entre as pendências: cobertura de testes abaixo de 80%; upload de arquivos no processamento em lote ainda não implementado; correção por IA operando com provedor simulado, sem provedor real validado; dependências de OCR indisponíveis no ambiente de teste; logout sem revogação de token no servidor; e pipeline de CI versionado, mas ainda sem execução confirmada. Itens como histórico acadêmico dedicado, relatórios, painel de qualidade e rotina de backup não foram identificados no código e dependem de confirmação do grupo sobre o escopo da entrega. 
-
-### 10.2 Trabalhos futuros
-
-Relatórios analíticos por turma e por aluno, evolução da leitura de respostas manuscritas, avaliação institucional do uso de IA externa e ampliação dos testes de ponta a ponta.
+| # | Entregável | Arquivo | Status |
+|---|---|---|---|
+| 1 | Plataforma funcional (Frontend + Backend + DB) | `backend/`, `frontend/`, `DADO_DE_TESTE_EDUGRADE.db` |  Parcial |
+| 2 | Requisitos Funcionais | `docs/REQUISITOS_FUNCIONAIS.md` |  Completo |
+| 3 | Regras de Negócio | `docs/REGRAS_DE_NEGOCIO.md` |  Completo |
+| 4 | Checklist Validação Funcional | `docs/CHECKLIST_VALIDACAO_FUNCIONAL.md` |  Executado (56% com evidência) |
+| 5 | Registro de Problemas | `docs/REGISTRO_PROBLEMAS.md` |  Atualizado (23 FUNCs + 8 BUGs herdados) |
+| 6 | Evidências Funcionais | `docs/EVIDENCIAS_FUNCIONAIS.md` |  14/25 cenários com print registrado |
+| 7 | Testes unitários/integração (≥80% cobertura) | `tests/unit/`, `htmlcov/` | apenas 55,50% |
+| 8 | Relatório HTML de cobertura | `htmlcov/index.html` |  Não gerado |
+| 9 | Pipeline CI/CD (GitHub Actions) | `.github/workflows/ci.yml` |  YAML com erro (BUG-16) |
+| 10 | Documento acadêmico (este arquivo) | `docs/DOCUMENTO_ENTREGA_A3.md` |  Atualizado |
+| 11 | Roteiro de Apresentação | `docs/ROTEIRO_APRESENTACAO_A3.md` |  Existe |
 
 ---
 
-## Referências internas
+## 2. Funcionalidades Principais — Estado Atual (Atualizado 05/11/2026)
 
-- `docs/REQUISITOS_FUNCIONAIS.md`
-- `docs/REGRAS_DE_NEGOCIO.md`
-- `docs/CHECKLIST_VALIDACAO_FUNCIONAL.md`
-- `docs/REGISTRO_PROBLEMAS.md`
-- `docs/QA/` (relatórios de auditoria e matriz de testes do grupo)
+| Funcionalidade | Requisitos | Regras | Status | Evidência |
+|---|---|---|---|---|
+| **Autenticação** (login aluno/professor/admin) | RF01–RF03 | RN42 |  Funciona (CV01, CV04) | `CV01a.png`, `CV01b.png`, `CV04.png` |
+| **Consulta notas aluno** | RF04 | RN01, RN14 |  **FALHA** (FUNC-01) | `CV02.png` |
+| **Acesso professor às turmas** | — | RN11 |  **PARCIAL** (FUNC-02) | `CV05a-c.png` |
+| **Criação de prova + validação soma** | RF10 | RN16–RN19 |  **FALHA** (FUNC-11) | `CV06.png` |
+| **Cadastro gabarito + versionamento** | RF12 | RN05, RN20, RN22 |  **PARCIAL** (FUNC-12) | `CV07.png` |
+| **Impressão PDF + QR Code** | RF11 | RN25, RN27, RN28 |  **FALHA** (FUNC-13) | `CV08.png` |
+| **Upload digitalizado + OCR** | RF13 | RN29–RN33 |  **BLOQUEADO** (BUG-14) | `CV09.png` |
+| **Correção assistida por IA** | RF14, RF15 | RN34–RN40 |  **BLOQUEADO** (BUG-15 + FUNC-14) | `CV10.png` |
+| **Publicação notas + auditoria** | RF16 | RN07, RN08, RN41 |  **FALHA** (FUNC-18) | `CV22.png` |
+| **Segurança: isolamento por perfil** | — | RN11, RN13, RN15 |  **PARCIAL** (FUNC-03, FUNC-15) | `CV21.png` |
+| **Admin: bloqueio/publicação notas** | — | RN12, RN02 |  **BLOQUEADO** (sem tela) | `CV20.png` |
+| **Admin: gestão usuários/filtros** | RF18 | — |  **FALHA** (FUNC-06, FUNC-19) | `ADMIN_EVIDENCIA.md` |
+| **Admin: UI/UX (idiomas, campos técnicos)** | RNF13 | — |  **PARCIAL** (FUNC-08, FUNC-21) | `ADMIN_EVIDENCIA.md` |
+
+---
+
+## 3. Validação Funcional — Resumo Executado (04/11/2026)
+
+### Cenários com evidência registrada: 14/25 (56%)
+
+| Status | Quantidade | Cenários |
+|---|---|---|
+| **PASSOU** | 3 | CV01a, CV01b, CV04 |
+| **FALHOU** | 7 | CV02, CV06, CV08, CV12, CV13, CV15, CV22 |
+| **PARCIAL** | 4 | CV05, CV07, CV10, CV21 |
+| **BLOQUEADO** | 5 | CV09, CV17, CV19, CV20, CV25 |
+| **NÃO EXECUTADO** | 6 | CV03, CV11, CV14, CV16, CV18, CV23, CV24 |
+
+**Detalhamento das evidências:** consulte `docs/EVIDENCIAS_FUNCIONAIS.md` (lista completa com arquivos esperados, status e observações). **Nota:** 0 prints físicos na pasta `docs/evidencias/funcional/` — capturar e salvar como `CVXX.png` antes da entrega final. 
+
+## 4. Problemas Identificados (Registro Consolidado)
+
+### 4.1 Da Validação Funcional (23 novos — FUNC-01 a FUNC-23)
+
+| ID | Severidade | Título | Responsável | Bloqueia |
+|---|---|---|---|---|
+| **FUNC-01** | **Alta** | Aluno não consulta notas (CV02) | Fernando | CV02, CV11, CV13 |
+| **FUNC-02** | **Alta** | Turmas listam sistema todo, 0 matriculados (CV05) | Fernando | CV05, CV12 |
+| **FUNC-03** | **Média** | Layout admin vaza antes do redirect (CV21) | Fernando | CV21, CV25 |
+| **FUNC-04** | **Média** | JSON bruto, headers inglês, datas ISO (CV05) | Fernando | CV05 |
+| **FUNC-05** | **Baixa** | Mensagens técnicas + baixo contraste | Fernando | CV01, CV02 |
+| **FUNC-06** | **Média** | Gestão usuários não filtra por perfil | Fernando | RF18 |
+| **FUNC-07** | **Média** | Painel admin: armazenamento não implementado | Fernando | — |
+| **FUNC-08** | **Baixa** | "Períodos letivos" em inglês | Fernando | RNF13 |
+| **FUNC-09** | **Média** | Criar conta por chamado falha sem SMTP | Gabriel/Fernando | RF24 |
+| **FUNC-10** | **Baixa** | Formulário aceita dados inválidos | Fernando | RF24, RNF13 |
+| **FUNC-11** | **Alta** | Botão "Gerar prova PDF" não funciona (CV06) | Fernando | CV06, CV08, CV11 |
+| **FUNC-12** | **Média** | PDF mostra "(multiple choice)" / "(short answer)" (CV07) | Fernando | CV07, CV15 |
+| **FUNC-13** | **Alta** | Impressão não reconhece banco de provas (CV08) | Fernando | CV08, CV15, CV24 |
+| **FUNC-14** | **Média** | IA: sem barra progresso, azul ilegível, status confuso (CV10) | Fernando | CV10 |
+| **FUNC-15** | **Alta** | API não lista provas/turmas + vazamento técnico (CV12) | Fernando | CV12, CV05, CV06 |
+| **FUNC-16** | **Média** | Aluno vê comandos técnicos na interface (CV13) | Fernando | CV13 |
+| **FUNC-17** | **Alta** | PDF aluno mostra códigos técnicos misturados (CV15) | Fernando | CV15 |
+| **FUNC-18** | **Alta** | Auditoria: botão não abre, ilegível, métricas quebradas (CV22) | Fernando | CV22 |
+| **FUNC-19** | **Média** | Filtros gestão usuários não funcionam (Admin) | Fernando | RF18 |
+| **FUNC-20** | **Média** | Cursos/Disciplinas fundidos na Gestão Acadêmica | Fernando/Caio | — |
+| **FUNC-21** | **Baixa** | Perfil admin: inglês+português + expõe is_superuser/role | Fernando | RNF13, RN15 |
+| **FUNC-22** | **Baixa** | Botão hambúrguer sem função + sidebar bug | Fernando | RNF13 |
+| **FUNC-23** | **Média** | Notificações sem sistema + refresh sem feedback | Fernando | — |
+
+> **OBS da CV20 (Admin lançar notas):** Sem tela de lançar notas para o admin, ele não consegue lançar pela interface. Marcar **PASSOU** mascom a observação: *"bloqueado pela ausência da tela; falta confirmar pela API"* (RN15). Confirmar na API é o que vale pela RN15.
+
+### 4.2 Pendências Herdadas da QA (01/11/2026)
+
+| ID | Prioridade | Problema | Estado | Bloqueia |
+|---|---|---|---|---|
+| **BUG-04** | Alta | Upload lote retorna 501 | Aberto | CV09, CV17 |
+| **BUG-07** | Média | Logout não revoga token | Aberto | CV25 |
+| **BUG-08** | Média | Upload sem validação MIME | Aberto | CV19 |
+| **BUG-11** | Média | Migração incompleta | Aberto | Caio |
+| **BUG-12** | Média | Falha init mantém server ativo | Aberto | — |
+| **BUG-14** | **Bloqueio** | Tesseract/Poppler ausentes | Aberto | CV09, CV10, CV17 |
+| **BUG-15** | **Bloqueio** | Sem chaves criptografia/IA | Aberto | CV10 |
+| **BUG-16** | Média | CI YAML com erro indentação | Parcial | Gabriel |
+| — | **Alta** | Cobertura 55,50% < 80% | Aberto | Fernando |
+
+---
+
+## 5. Gaps Conhecidos para Entrega (Atualizar antes da entrega final)
+
+| Dimensão | Gap | Ação Necessária | Responsável | Prazo |
+|---|---|---|---|---|
+| **Funcionalidade core** | Aluno não vê notas (FUNC-01) | Corrigir endpoint `/aluno/minhas-notas` | Fernando | Crítico |
+| **Funcionalidade core** | Professor vê turmas erradas (FUNC-02) | Filtrar por `professor_id` no backend | Fernando | Crítico |
+| **Funcionalidade core** | Criação prova/PDF/gabarito quebrados (FUNC-11,12,13) | Corrigir fluxo professor completo | Fernando | Crítico |
+| **Segurança** | Auth no frontend (FUNC-03) | Mover para middleware/backend | Fernando | Crítico |
+| **Segurança** | API vaza erros técnicos (FUNC-15) | Sanitizar respostas de erro | Fernando | Alto |
+| **Infra/OCR** | Tesseract/Poppler (BUG-14) | Instalar no ambiente teste | Gabriel/DevOps | Alto |
+| **Infra/IA** | Chave NVIDIA NIM (BUG-15) | Configurar no `.env` | Fernando | Alto |
+| **Auth** | Token revocation (BUG-07) | Implementar blacklist/Redis | Fernando | Alto |
+| **Qualidade** | Cobertura 55,5% (meta 80%) | Escrever testes unitários/integração | Fernando | Obrigatório |
+| **CI/CD** | Pipeline não confirmado (BUG-16) | Corrigir YAML + rodar | Gabriel | Obrigatório |
+| **Validação** | 6/25 CVs não executados | Completar checklist | Lucas | Obrigatório |
+| **Evidências** | 11/25 prints faltando | Capturar nos cenários pendentes | Lucas | Obrigatório |
+| **Docs** | README incompleto (integrantes, comandos) | Atualizar | Gabriel | Médio |
+
+---
+
+## 6. Critérios de Aceite do Guia Operacional — Verificação
+
+| Critério | Obrigatório? | Atendido? | Evidência |
+|---|---|---|---|
+| Sistema funcional (3 perfis, ciclo prova, IA com aprovação humana) | Sim |  Parcial | FUNC-01,02,11,12,13, BUG-14,15 bloqueiam |
+| Cobertura ≥ 80% com relatório HTML | Sim |  **Não** | 55,50% (BUG QA) |
+| GitHub Actions passando | Sim |  Parcial | BUG-16 (YAML erro) |
+| Documentação completa (requisitos, regras, checklist, registro, A3, slides) | Sim |  Sim | Arquivos em `docs/` |
+| Versionamento GitFlow + commits padronizados | Sim | Sim | Branches `feature/*`, `docs/*`, `fix/*` |
+| Evidências reais (prints, logs, relatórios) | Sim |  Parcial | 14/25 prints registrados em `EVIDENCIAS_FUNCIONAIS.md` |
+
+---
+
+## 7. Próximos Passos Priorizados (Roteiro para Entrega)
+
+### Parte 1 Desbloquear Validação 
+- [ ] Fernando: Corrigir FUNC-01, FUNC-02, FUNC-03 (backend auth + queries + middleware)
+- [ ] Fernando: Corrigir FUNC-04, FUNC-05 (frontend formatters + i18n + contraste)
+- [ ] Fernando: Corrigir FUNC-11, FUNC-12, FUNC-13 (fluxo prova: gerar PDF, gabarito, impressão)
+- [ ] Fernando: Corrigir FUNC-15 (API não lista provas/turmas + sanitizar erros)
+- [ ] Fernando: Corrigir FUNC-14 (IA: barra progresso, contraste azul, status)
+- [ ] Gabriel/DevOps: Instalar Tesseract + Poppler (BUG-14)
+- [ ] Fernando: Configurar `ENCRYPTION_KEY` + `NVIDIA_NIM_API_KEY` no `.env` (BUG-15)
+- [ ] Gabriel/Fernando: Documentar SMTP_HOST ou implementar fallback (FUNC-09)
+
+### Parte 2 — Completar Validação Funcional 
+- [ ] Lucas: Converter 23 WMFs → PNGs (Paint/ImageMagick)
+- [ ] Lucas: Capturar CV24 (QR Code) e CV25 (logout token reuse)
+- [ ] Lucas: Executar CV03, CV11, CV14, CV16, CV18, CV23 (cenários restantes)
+- [ ] Lucas: Coletar prints dos cenários executados
+- [ ] Lucas: Atualizar `CHECKLIST_VALIDACAO_FUNCIONAL.md` com resultados finais
+- [ ] Lucas: Fechar FUNCs resolvidos no `REGISTRO_PROBLEMAS.md`
+
+### Parte 3 — Correções de UI/Admin + Qualidade 
+- [ ] Fernando: Corrigir FUNC-06, FUNC-19 (filtros gestão usuários)
+- [ ] Fernando: Corrigir FUNC-20 (separar Cursos/Disciplinas)
+- [ ] Fernando: Corrigir FUNC-21 (perfil admin: idiomas + campos técnicos)
+- [ ] Fernando: Corrigir FUNC-22 (hambúrguer + sidebar)
+- [ ] Fernando: Corrigir FUNC-23 (notificações + refresh)
+- [ ] Fernando: Corrigir FUNC-16, FUNC-17 (interface aluno limpa)
+- [ ] Fernando: Corrigir FUNC-18 (auditoria funcional + legível)
+- [ ] Fernando: Implementar revogação token logout (BUG-07)
+- [ ] Fernando: Elevar cobertura para ≥ 80% + gerar `htmlcov/`
+- [ ] Gabriel: Corrigir `ci.yml` + confirmar execução no Actions
+- [ ] Gabriel: Atualizar README (integrantes completos, comandos corretos)
+- [ ] Gabriel: Decidir docs na raiz vs `docs/`
+
+### Parte 4 — Ensaio + Entrega Final 
+- [ ] Lucas: Atualizar seção "Limitações conhecidas" no `DOCUMENTO_ENTREGA_A3.md`
+- [ ] Lucas: Revisar `ROTEIRO_APRESENTACAO_A3.md` com evidências reais
+- [ ] Todos: Revisão cruzada + ensaio apresentação
+- [ ] Commit final + tag de entrega
+
+
+
+## 8. Referências Internas
+
+- `docs/REQUISITOS_FUNCIONAIS.md` — 29 RFs + 13 RNFs + 4 itens em aberto
+- `docs/REGRAS_DE_NEGOCIO.md` — 45 regras (RN01–RN45)
+- `docs/CHECKLIST_VALIDACAO_FUNCIONAL.md` — 25 cenários + resultados 04/11/2026
+- `docs/REGISTRO_PROBLEMAS.md` — 23 FUNCs novos + 8 BUGs herdados + rastreabilidade completa
+- `docs/EVIDENCIAS_FUNCIONAIS.md` — 14/25 cenários com evidência registrada
+- `docs/QA/MATRIZ_DE_TESTES.md` — QA anterior (01/11/2026)
+- `docs/ROTEIRO_APRESENTACAO_A3.md` — Slides da apresentação
+
+---
+
+**Última atualização:** 05/11/2026 — Lucas Henrique Miranda (RA 325131396)  
+**Baseado na execução de:** 04/11/2026 (validação funcional) + revisão repositório 01/11/2026 (QA) 
