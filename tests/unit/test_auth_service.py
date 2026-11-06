@@ -157,3 +157,53 @@ def test_permission_service_class_access(role, profile_method, profile, expected
             assert service.can_access_class(SimpleNamespace(role=role, id=uuid4()), uuid4()) is expected
     else:
         assert service.can_access_class(SimpleNamespace(role=role, id=uuid4()), uuid4()) is expected
+
+
+@pytest.mark.parametrize("owns_class", [True, False])
+def test_permission_service_exam_access_checks_teacher_class(owns_class):
+    service = PermissionService(MagicMock())
+    teacher_id, exam_id, class_id = uuid4(), uuid4(), uuid4()
+    service.teacher_repo = MagicMock()
+    service.teacher_repo.get_by_user_id.return_value = SimpleNamespace(id=teacher_id)
+    exam = SimpleNamespace(class_id=class_id)
+
+    with (
+        patch("backend.app.repositories.exam_repository.ExamRepository") as exam_repo_type,
+        patch("backend.app.repositories.academic_repository.ClassRepository") as class_repo_type,
+    ):
+        exam_repo_type.return_value.get.return_value = exam
+        class_repo_type.return_value.get.return_value = SimpleNamespace(
+            teacher_id=teacher_id if owns_class else uuid4()
+        )
+        result = service.can_manage_exam(
+            SimpleNamespace(role=UserRole.TEACHER, id=uuid4()), exam_id
+        )
+
+    assert result is owns_class
+
+
+def test_permission_service_grade_access_resolves_submission_version():
+    service = PermissionService(MagicMock())
+    teacher_id, exam_id, submission_id = uuid4(), uuid4(), uuid4()
+    version_id, class_id = uuid4(), uuid4()
+    service.teacher_repo = MagicMock()
+    service.teacher_repo.get_by_user_id.return_value = SimpleNamespace(id=teacher_id)
+    submission = SimpleNamespace(version_id=version_id)
+    version = SimpleNamespace(exam_id=exam_id)
+    exam = SimpleNamespace(class_id=class_id)
+
+    with (
+        patch("backend.app.repositories.exam_repository.ExamSubmissionRepository") as submission_repo_type,
+        patch("backend.app.repositories.exam_repository.ExamRepository") as exam_repo_type,
+        patch("backend.app.repositories.exam_repository.ExamVersionRepository") as version_repo_type,
+        patch("backend.app.repositories.academic_repository.ClassRepository") as class_repo_type,
+    ):
+        submission_repo_type.return_value.get.return_value = submission
+        exam_repo_type.return_value.get.return_value = exam
+        version_repo_type.return_value.get.return_value = version
+        class_repo_type.return_value.get.return_value = SimpleNamespace(teacher_id=teacher_id)
+        allowed = service.can_grade_submission(
+            SimpleNamespace(role=UserRole.TEACHER, id=uuid4()), submission_id
+        )
+
+    assert allowed is True

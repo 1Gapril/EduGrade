@@ -63,9 +63,7 @@ def _assert_batch_access(
     batch = db.get(GradingBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Lote não encontrado")
-    exam = _assert_exam_access(db, current_user, batch.exam_id, permission)
-    if exam.id != batch.exam_id:
-        raise HTTPException(status_code=404, detail="Lote não encontrado")
+    _assert_exam_access(db, current_user, batch.exam_id, permission)
     return batch
 
 
@@ -109,7 +107,7 @@ async def list_batches(
             | _teacher_class_ids(service.db, current_user, "upload_submissions")
         )
         query = query.join(Exam, GradingBatch.exam_id == Exam.id).filter(
-            Exam.class_id.in_(allowed_classes) if allowed_classes else False
+            Exam.class_id.in_(allowed_classes)
         )
     if exam_id is not None:
         query = query.filter(GradingBatch.exam_id == exam_id)
