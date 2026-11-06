@@ -4,7 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import status as http_status
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
@@ -33,7 +33,13 @@ from backend.app.models.exam import (
     ExamVersion,
 )
 from backend.app.models.user import User, UserRole
+from backend.app.models.operation_job import OperationKind
 from backend.app.schemas.common import PaginatedResponse, PaginationParams
+from backend.app.schemas.operation_job import (
+    OperationJobCreatedResponse,
+    SubmissionFromUploadsRequest,
+    SubmissionUploadResponse,
+)
 from backend.app.schemas.exam import (
     AnswerKeyCreate,
     AnswerKeyResponse,
@@ -70,13 +76,20 @@ from backend.app.services.exam_service import (
     QuestionService,
     SubmissionService,
 )
+from backend.app.services.operation_job_service import OperationJobService
+from backend.app.services.operation_runner import (
+    run_ai_correction_job,
+    run_exam_pdf_import_job,
+)
 
 router = APIRouter(prefix="/exams", tags=["Provas"])
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _private_pdf_response(file_path: str) -> FileResponse:
-    pdf_directory = (PROJECT_ROOT / "storage" / "exams" / "pdfs").resolve()
+    pdf_directory = (PROJECT_ROOT / settings.pdf_dir).resolve() if not Path(
+        settings.pdf_dir
+    ).is_absolute() else Path(settings.pdf_dir).resolve()
     path = Path(file_path)
     if not path.is_absolute():
         path = PROJECT_ROOT / path
@@ -274,6 +287,60 @@ async def analyze_exam_pdfs(
     exam_content = await read_pdf(exam_file, "a prova")
     answer_key_content = await read_pdf(answer_key_file, "o gabarito")
     return await ExamPDFImportService(db).analyze(exam_content, answer_key_content)
+
+
+@router.post(
+    "/import/pdf",
+    response_model=OperationJobCreatedResponse,
+    status_code=http_status.HTTP_202_ACCEPTED,
+)
+async def import_exam_pdf_job(
+    background_tasks: BackgroundTasks,
+    exam_file: UploadFile = File(...),
+    answer_key_file: UploadFile | None = File(None),
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Analisa o PDF em segundo plano e acompanha as etapas pela barra global."""
+    from backend.app.integrations.storage import FileStorage
+
+    async def validate_pdf(upload: UploadFile | None, label: str) -> None:
+        if upload is None:
+            return
+        suffix = Path((upload.filename or "").replace("\\", "/")).suffix.lower()
+        if suffix != ".pdf":
+            raise HTTPException(status_code=422, detail=f"Envie um arquivo PDF para {label}.")
+        head = await upload.read(1024)
+        await upload.seek(0)
+        if b"%PDF-" not in head:
+            raise HTTPException(
+                status_code=422,
+                detail=f"O arquivo enviado para {label} não é um PDF válido.",
+            )
+
+    await validate_pdf(answer_key_file, "o gabarito")
+    await validate_pdf(exam_file, "a prova")
+
+    storage = FileStorage()
+    exam_path = await storage.save(exam_file, folder="temp")
+    answer_key_path = (
+        await storage.save(answer_key_file, folder="temp") if answer_key_file is not None else None
+    )
+
+    jobs = OperationJobService(db)
+    job = jobs.create(
+        kind=OperationKind.EXAM_PDF_IMPORT,
+        title=f"Importação de prova — {exam_file.filename}",
+        user_id=current_user.id,
+        payload={
+            "exam_filename": exam_file.filename,
+            "answer_key_filename": answer_key_file.filename if answer_key_file else None,
+        },
+        step_key="queued",
+        step_label="Aguardando início",
+    )
+    background_tasks.add_task(run_exam_pdf_import_job, job.id, exam_path, answer_key_path)
+    return OperationJobCreatedResponse(job_id=job.id, status=job.status.value)
 
 
 @router.post("/complete", response_model=ExamResponse, status_code=http_status.HTTP_201_CREATED)
@@ -579,6 +646,25 @@ def cancel_exam(
     return exam
 
 
+@router.post("/{exam_id}/restore", response_model=ExamResponse)
+def restore_exam(
+    exam_id: UUID,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Reativa uma prova cancelada como rascunho (permite publicar de novo)."""
+    _assert_exam_access(db, current_user, exam_id, "edit_assessments")
+    service = ExamService(db)
+    try:
+        exam = service.restore(exam_id, current_user.id)
+        db.commit()
+        db.refresh(exam)
+    except Exception:
+        db.rollback()
+        raise
+    return exam
+
+
 @router.get("/{exam_id}/validate", response_model=ExamScoreValidation)
 def validate_exam_scores(
     exam_id: UUID,
@@ -825,7 +911,7 @@ def generate_student_pdf(
     copy = db.get(ExamCopy, copy_id)
     if copy is None:
         raise HTTPException(status_code=404, detail="Cópia de prova não encontrada")
-    _assert_exam_access(db, current_user, copy.exam_id, "create_assessments")
+    _assert_exam_access(db, current_user, copy.version.exam_id, "create_assessments")
     service = ExamCopyService(db)
     try:
         pdf_path = service.generate_pdf_student(copy_id, current_user.id)
@@ -877,7 +963,7 @@ async def create_submission(
     copy = db.get(ExamCopy, copy_id)
     if copy is None:
         raise HTTPException(status_code=404, detail="Cópia de prova não encontrada")
-    _assert_exam_access(db, current_user, copy.exam_id, "upload_submissions")
+    _assert_exam_access(db, current_user, copy.version.exam_id, "upload_submissions")
 
     # Salva arquivos
     storage = FileStorage()
@@ -967,7 +1053,13 @@ def list_submissions(
             from backend.app.models.exam import SubmissionStatus
             query = query.filter(ExamSubmission.status == SubmissionStatus(status))
         total = query.count()
-        items = query.order_by(ExamSubmission.submitted_at.desc()).offset(params.offset).limit(params.limit).all()
+        items = [
+            SubmissionResponse.model_validate(submission).model_dump(mode="json")
+            for submission in query.order_by(ExamSubmission.submitted_at.desc())
+            .offset(params.offset)
+            .limit(params.limit)
+            .all()
+        ]
         submissions = items
     elif version_id:
         submissions = service.repo.get_by_version(version_id)
@@ -986,6 +1078,11 @@ def list_submissions(
         submissions = service.repo.get_all(skip=params.offset, limit=params.limit)
         total = len(submissions)
         items = submissions
+    if items and not isinstance(items[0], dict):
+        items = [
+            SubmissionResponse.model_validate(submission).model_dump(mode="json")
+            for submission in items
+        ]
     return PaginatedResponse(
         items=items, total=total, page=params.page, page_size=params.page_size,
         total_pages=(total + params.page_size - 1) // params.page_size,
@@ -1013,7 +1110,7 @@ def get_submission(
         return SubmissionStudentResponse.model_validate(submission).model_dump(mode="json")
     if current_user.role == UserRole.TEACHER:
         _assert_submission_access(db, current_user, submission, "receive_submissions")
-    return submission
+    return SubmissionResponse.model_validate(submission).model_dump(mode="json")
 
 
 @router.post("/submissions/{submission_id}/pages", response_model=list[dict])
@@ -1030,6 +1127,157 @@ def add_submission_pages(
     _assert_submission_access(db, current_user, submission, "upload_submissions")
     created = service.add_pages(submission_id, pages)
     return [{"id": str(p.id), "page_number": p.page_number} for p in created]
+
+
+# ==================== Uploads individuais (progresso real por arquivo) ====================
+
+def _upload_storage_root() -> Path:
+    """Diretório autorizado para arquivos enviados individualmente."""
+    configured = Path(settings.upload_dir)
+    if not configured.is_absolute():
+        configured = PROJECT_ROOT / configured
+    return configured.resolve()
+
+
+def _validated_upload_path(raw_path: str) -> Path:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    path = path.resolve()
+    root = _upload_storage_root()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo enviado não encontrado")
+    return path
+
+
+@router.post("/uploads", response_model=SubmissionUploadResponse)
+async def upload_submission_file(
+    copy_id: UUID = Form(...),
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Recebe um arquivo por vez, permitindo progresso real no navegador.
+
+    Os arquivos ficam em ``storage/exams`` e só passam a compor a submissão
+    quando o professor envia a lista completa em ``/exams/submissions/from-uploads``.
+    """
+    from backend.app.integrations.storage import FileStorage
+
+    copy = db.get(ExamCopy, copy_id)
+    if copy is None:
+        raise HTTPException(status_code=404, detail="Cópia de prova não encontrada")
+    _assert_exam_access(db, current_user, copy.version.exam_id, "upload_submissions")
+
+    storage = FileStorage()
+    saved_path = await storage.save(file, folder="exams")
+    path = _validated_upload_path(saved_path)
+    return SubmissionUploadResponse(
+        path=str(path),
+        filename=file.filename or path.name,
+        size_bytes=path.stat().st_size,
+    )
+
+
+@router.post(
+    "/submissions/from-uploads",
+    response_model=SubmissionResponse,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def create_submission_from_uploads(
+    data: SubmissionFromUploadsRequest,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Cria a submissão a partir dos arquivos já recebidos por ``/exams/uploads``."""
+    from backend.app.integrations.storage import FileStorage
+
+    copy = db.get(ExamCopy, data.copy_id)
+    if copy is None:
+        raise HTTPException(status_code=404, detail="Cópia de prova não encontrada")
+    _assert_exam_access(db, current_user, copy.version.exam_id, "upload_submissions")
+
+    paths: list[str] = []
+    seen: set[str] = set()
+    for upload in data.uploads:
+        path = _validated_upload_path(upload.path)
+        if str(path) in seen:
+            raise HTTPException(status_code=422, detail="Arquivo repetido na submissão")
+        seen.add(str(path))
+        paths.append(str(path))
+
+    submission_data = SubmissionCreate(
+        copy_id=data.copy_id,
+        version_id=copy.version_id,
+        student_id=data.student_id,
+        original_files=paths,
+    )
+    service = SubmissionService(db)
+    try:
+        submission = service.create(submission_data, current_user.id)
+        storage = FileStorage()
+        page_paths = [
+            page_path for file_path in paths for page_path in storage.expand_pdf_pages(file_path)
+        ]
+        service.add_pages(
+            submission.id,
+            [
+                SubmissionPageCreate(
+                    submission_id=submission.id,
+                    page_number=page_number,
+                    original_image_path=page_path,
+                )
+                for page_number, page_path in enumerate(page_paths, start=1)
+            ],
+        )
+        db.commit()
+        db.refresh(submission)
+    except Exception:
+        db.rollback()
+        raise
+    return submission
+
+
+@router.post(
+    "/submissions/{submission_id}/correction-jobs",
+    response_model=OperationJobCreatedResponse,
+    status_code=http_status.HTTP_202_ACCEPTED,
+)
+def start_correction_job(
+    submission_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Inicia OCR + correção por IA em segundo plano, com progresso por etapa."""
+    submission = db.get(ExamSubmission, submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submissão não encontrada")
+    _assert_submission_access(db, current_user, submission, "grade_questions")
+
+    questions_total = (
+        db.query(ExamQuestion).filter(ExamQuestion.exam_id == submission.version.exam_id).count()
+    )
+    jobs = OperationJobService(db)
+    job = jobs.create(
+        kind=OperationKind.AI_CORRECTION,
+        title=f"Correção por IA — {submission.copy.copy_identifier}",
+        user_id=current_user.id,
+        payload={
+            "submission_id": str(submission_id),
+            "exam_id": str(submission.version.exam_id),
+        },
+        total=questions_total,
+        step_key="queued",
+        step_label="Aguardando início",
+    )
+    background_tasks.add_task(
+        run_ai_correction_job,
+        job.id,
+        submission_id,
+        current_user.id,
+    )
+    return OperationJobCreatedResponse(job_id=job.id, status=job.status.value)
 
 
 @router.post("/submissions/{submission_id}/process-ocr")
@@ -1128,5 +1376,5 @@ def generate_qr_codes(
         )
         items.append(qr_data)
 
-    paths = qr_gen.generate_batch(items, output_dir="./storage/exams/qrcodes", prefix="qr_")
+    paths = qr_gen.generate_batch(items, output_dir=settings.qr_dir, prefix="qr_")
     return {"count": len(paths), "paths": paths}

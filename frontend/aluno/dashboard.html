@@ -248,7 +248,6 @@
         </div>
 
         <!-- Stats -->
-        <p class="text-muted" role="status">A lista de materiais vem da API; indicadores individuais de provas, notas e frequência não estão disponíveis.</p>
         <div class="stats-grid" id="stats-grid">
           <!-- Populated by JS -->
         </div>
@@ -326,44 +325,72 @@
     });
 
     async function loadStudentData() {
+      let context = null;
       try {
-        const profile = await api.getProfile();
-        renderStudentHeader(profile);
+        context = await api.request('/academic/my-profile');
+        renderStudentHeader(context);
       } catch (error) {
         UI.showError(error.message || 'Não foi possível carregar o perfil do aluno.');
       }
-      const [, materialCount] = await Promise.all([
-        loadUpcomingExams(),
+      const [examCount, materialCount, gradeStats, attendance] = await Promise.all([
+        loadUpcomingExams(context),
         loadStudyMaterials(),
         loadRecentGrades(),
         loadAttendance(),
       ]);
-      renderStats(materialCount);
+      renderStats({ materialCount, examCount, gradeStats, attendance });
     }
 
-    function renderStudentHeader(profile) {
-      const name = profile.full_name || profile.name || profile.username || 'Aluno';
+    function renderStudentHeader(context) {
+      const student = context?.student || {};
+      const user = context?.user || {};
+      const name = user.full_name || user.username || 'Aluno';
       document.getElementById('student-name').textContent = name;
       document.getElementById('student-avatar').textContent = name[0].toUpperCase();
-      document.getElementById('student-ra').textContent = profile.ra || 'Não disponível';
-      document.getElementById('student-course').textContent = profile.course?.name || 'Não disponível';
-      document.getElementById('student-class').textContent = profile.class?.name || 'Não disponível';
-      document.getElementById('student-period').textContent = profile.currentPeriod?.name || 'Não disponível';
+      document.getElementById('student-ra').textContent = student.ra || 'Não disponível';
+      document.getElementById('student-course').textContent = student.course?.name || 'Não disponível';
+      document.getElementById('student-class').textContent = student.class?.name || 'Não disponível';
+      document.getElementById('student-period').textContent = context?.current_period?.name || 'Não disponível';
     }
 
-    function renderStats(materialCount) {
+    function renderStats({ materialCount, examCount, gradeStats, attendance }) {
+      const formatValue = value => (value === null || value === undefined ? '—' : String(value));
       const stats = [
-        { label: 'Materiais disponíveis', value: materialCount === null ? '—' : String(materialCount), icon: 'file-text', color: 'primary' },
-        { label: 'Provas Agendadas', icon: 'file-text', color: 'info' },
-        { label: 'Média Geral', icon: 'award', color: 'success' },
-        { label: 'Frequência', icon: 'calendar', color: 'warning' },
+        {
+          label: 'Materiais disponíveis',
+          value: formatValue(materialCount),
+          icon: 'file-text',
+          color: 'primary',
+        },
+        {
+          label: 'Provas na sua turma',
+          value: formatValue(examCount),
+          icon: 'file-text',
+          color: 'info',
+        },
+        {
+          label: 'Média geral',
+          value: gradeStats?.average === null || gradeStats?.average === undefined
+            ? '—'
+            : Number(gradeStats.average).toFixed(2),
+          icon: 'award',
+          color: 'success',
+        },
+        {
+          label: 'Frequência',
+          value: attendance === null || attendance === undefined
+            ? '—'
+            : `${Number(attendance).toFixed(1)}%`,
+          icon: 'calendar',
+          color: 'warning',
+        },
       ];
 
       document.getElementById('stats-grid').innerHTML = stats.map(s => `
         <div class="stat-card">
           <div class="stat-icon ${s.color}" data-feather="${s.icon}"></div>
           <div class="stat-content">
-            <div class="stat-value">${s.value === undefined ? '—' : s.value}</div>
+            <div class="stat-value">${s.value}</div>
             <div class="stat-label">${s.label}</div>
           </div>
         </div>
@@ -371,10 +398,66 @@
       feather.replace();
     }
 
-    async function loadUpcomingExams() {
-      document.getElementById('upcoming-exams-section').style.display = 'block';
-      document.getElementById('upcoming-exams-list').textContent =
-        'A API ainda não disponibiliza provas filtradas pelas matrículas do aluno.';
+    async function loadUpcomingExams(context) {
+      const section = document.getElementById('upcoming-exams-section');
+      const list = document.getElementById('upcoming-exams-list');
+      section.style.display = 'block';
+      list.textContent = 'Carregando provas...';
+      try {
+        const response = await api.request('/exams?page=1&page_size=100');
+        const exams = (Array.isArray(response) ? response : response.items || []);
+        const enrolledClassIds = new Set(
+          (context?.student?.enrollments || []).map(enrollment => enrollment.class_id),
+        );
+        const visible = exams
+          .filter(exam => exam.status !== 'cancelled')
+          .filter(exam => enrolledClassIds.size === 0 || enrolledClassIds.has(exam.class_id));
+        list.replaceChildren();
+        if (visible.length === 0) {
+          list.textContent = 'Nenhuma prova publicada para as suas turmas até o momento.';
+          return 0;
+        }
+        const statusLabels = {
+          published: 'Publicada',
+          printed: 'Impressa',
+          in_application: 'Em aplicação',
+          awaiting_correction: 'Aguardando correção',
+          in_correction: 'Em correção',
+          awaiting_review: 'Aguardando revisão',
+          finalized: 'Finalizada',
+        };
+        for (const exam of visible) {
+          const card = document.createElement('article');
+          card.className = 'exam-card';
+          const header = document.createElement('div');
+          header.className = 'exam-card-header';
+          const title = document.createElement('span');
+          title.className = 'exam-card-title';
+          title.textContent = exam.title;
+          const status = document.createElement('span');
+          status.className = 'exam-card-date';
+          status.textContent = statusLabels[exam.status] || exam.status;
+          header.append(title, status);
+          const body = document.createElement('div');
+          body.className = 'exam-card-body';
+          const meta = document.createElement('div');
+          meta.className = 'exam-card-meta';
+          const date = document.createElement('span');
+          date.textContent = exam.scheduled_date
+            ? `Data prevista: ${UI.formatDate(exam.scheduled_date)}`
+            : 'Data a definir';
+          const score = document.createElement('span');
+          score.textContent = `Valor: ${exam.total_score} pontos`;
+          meta.append(date, score);
+          body.appendChild(meta);
+          card.append(header, body);
+          list.appendChild(card);
+        }
+        return visible.length;
+      } catch (error) {
+        list.textContent = error.message || 'Não foi possível carregar as provas.';
+        return null;
+      }
     }
 
     async function loadStudyMaterials() {
@@ -443,15 +526,101 @@
     }
 
     async function loadRecentGrades() {
-      document.getElementById('recent-grades-section').style.display = 'block';
-      document.getElementById('recent-grades-body').innerHTML =
-        '<tr><td colspan="5">A API ainda não disponibiliza a consulta de notas do aluno.</td></tr>';
+      const section = document.getElementById('recent-grades-section');
+      const body = document.getElementById('recent-grades-body');
+      section.style.display = 'block';
+      body.innerHTML = '<tr><td colspan="5">Carregando notas...</td></tr>';
+      try {
+        const [gradeResponse, classResponse] = await Promise.all([
+          api.request('/academic/grades/my?page=1&page_size=100'),
+          api.request('/academic/classes?page=1&page_size=100'),
+        ]);
+        const grades = Array.isArray(gradeResponse) ? gradeResponse : gradeResponse.items || [];
+        const classes = Array.isArray(classResponse) ? classResponse : classResponse.items || [];
+        const subjectByClass = new Map(
+          classes.map(classRecord => [classRecord.id, classRecord.subject?.name || classRecord.name]),
+        );
+        body.replaceChildren();
+        if (grades.length === 0) {
+          body.innerHTML = '<tr><td colspan="5">Ainda não há notas publicadas para você.</td></tr>';
+          return { average: null };
+        }
+        let total = 0;
+        let published = 0;
+        for (const grade of [...grades].sort(
+          (a, b) => new Date(b.published_at || 0) - new Date(a.published_at || 0),
+        ).slice(0, 10)) {
+          const row = document.createElement('tr');
+          const subject = document.createElement('td');
+          subject.textContent = subjectByClass.get(grade.assessment?.class_id) || '—';
+          const exam = document.createElement('td');
+          exam.textContent = grade.assessment?.title || '—';
+          const date = document.createElement('td');
+          const when = grade.published_at || grade.graded_at || grade.assessment?.scheduled_date;
+          date.textContent = when ? UI.formatDate(when) : '—';
+          const score = document.createElement('td');
+          score.style.textAlign = 'right';
+          score.textContent = `${grade.score} / ${grade.assessment?.max_score ?? '—'}`;
+          const status = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = `grade-badge ${grade.is_official ? 'approved' : 'pending'}`;
+          badge.textContent = grade.is_official ? 'Publicada' : 'Aguardando publicação';
+          status.appendChild(badge);
+          row.append(subject, exam, date, score, status);
+          body.appendChild(row);
+          if (grade.is_official && grade.assessment?.max_score) {
+            total += (Number(grade.score) / Number(grade.assessment.max_score)) * 10;
+            published += 1;
+          }
+        }
+        return { average: published > 0 ? total / published : null };
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="5">${error.message || 'Não foi possível carregar as notas.'}</td></tr>`;
+        return { average: null };
+      }
     }
 
     async function loadAttendance() {
-      document.getElementById('attendance-section').style.display = 'block';
-      document.getElementById('attendance-summary').textContent =
-        'A API permite consultar a frequência por matrícula, mas não disponibiliza as matrículas do aluno para este painel.';
+      const section = document.getElementById('attendance-section');
+      const summary = document.getElementById('attendance-summary');
+      section.style.display = 'block';
+      summary.textContent = 'Carregando frequência...';
+      try {
+        const items = await api.request('/academic/attendance/my');
+        const summaries = Array.isArray(items) ? items : [];
+        summary.replaceChildren();
+        if (summaries.length === 0) {
+          summary.textContent = 'Nenhuma matrícula ativa encontrada para exibir frequência.';
+          return null;
+        }
+        const totals = summaries.reduce(
+          (accumulator, item) => ({
+            classes: accumulator.classes + Number(item.total_classes || 0),
+            present: accumulator.present + Number(item.present_count || 0),
+          }),
+          { classes: 0, present: 0 },
+        );
+        const overall = totals.classes > 0 ? (totals.present / totals.classes) * 100 : 0;
+        const list = document.createElement('ul');
+        list.className = 'stats-summary-list';
+        for (const item of summaries) {
+          const entry = document.createElement('li');
+          entry.textContent = `${item.subject_name || item.class_name}: `
+            + `${item.present_count}/${item.total_classes} presenças `
+            + `(${Number(item.percentage).toFixed(1)}%)`;
+          list.appendChild(entry);
+        }
+        summary.append(
+          Object.assign(document.createElement('p'), {
+            textContent: `Frequência geral: ${overall.toFixed(1)}% em ${totals.classes} aula(s) registradas.`,
+          }),
+          list,
+        );
+        return overall;
+      } catch (error) {
+        summary.textContent = error.message || 'Não foi possível carregar a frequência.';
+        return null;
+      }
     }
   </script>
 </body>

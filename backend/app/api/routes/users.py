@@ -210,6 +210,36 @@ def search_users(
     return service.search_users(q, role)
 
 
+# Rotas específicas precisam ser declaradas antes de /{user_id}; caso contrário
+# o FastAPI tenta interpretar "students"/"teachers" como UUID.
+@router.get("/students", response_model=PaginatedResponse[StudentWithUserResponse])
+def list_users_students(
+    course_id: UUID | None = None,
+    class_id: UUID | None = None,
+    params: PaginationParams = Depends(),
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Lista alunos com os dados de usuário (alias de /students)."""
+    return list_students(
+        course_id=course_id,
+        class_id=class_id,
+        params=params,
+        current_user=current_user,
+        db=db,
+    )
+
+
+@router.get("/teachers", response_model=PaginatedResponse[TeacherWithUserResponse])
+def list_users_teachers(
+    params: PaginationParams = Depends(),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Lista professores com os dados de usuário (alias de /teachers)."""
+    return list_teachers(params=params, current_user=current_user, db=db)
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: UUID,
@@ -563,7 +593,12 @@ def get_my_admin_profile(
     return admin
 
 
-# Include sub-routers
+# Rotas de perfis acadêmicos também ficam disponíveis em /students e /teachers.
 router.include_router(student_router)
 router.include_router(teacher_router)
 router.include_router(admin_router)
+
+# Sub-routers expostos na raiz da API (/api/v1/students, /api/v1/teachers).
+students_router = student_router
+teachers_router = teacher_router
+administrators_router = admin_router

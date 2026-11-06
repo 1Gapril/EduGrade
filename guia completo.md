@@ -125,10 +125,15 @@ http://localhost:8000/health
 	Status do servidor (JSON)
 👤 Passo 9 — Contas de desenvolvimento
 
-O seed atual cria contas e registros demonstrativos no banco configurado.
-Use-o somente em um banco descartável de desenvolvimento/teste; não considere
-essas contas credenciais administrativas próprias e nunca use o seed em um
-banco com dados reais.
+O seed cria duas contas para cada perfil (administrador, professor e aluno).
+A lista completa de usuários e senhas está em CREDENCIAIS.md, na raiz do
+projeto. Use essas contas apenas em desenvolvimento/teste e troque as senhas
+antes de publicar o sistema.
+
+Para limpar o banco e recriar apenas o necessário (com backup automático):
+
+cmd
+python scripts\reset_db.py
 
 🛑 Passo 10 — Parar o Servidor
 

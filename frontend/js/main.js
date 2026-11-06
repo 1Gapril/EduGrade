@@ -249,6 +249,48 @@ class APIClient {
       xhr.send(formData);
     });
   }
+
+  /**
+   * Envia um FormData com progresso real de transferência (XHR).
+   * Usado pelo ProgressManager nas operações de upload do EduGrade.
+   */
+  uploadForm(endpoint, formData, { method = 'POST', onProgress } = {}) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(method, `${this.baseURL}${endpoint}`);
+      if (this.accessToken) {
+        xhr.setRequestHeader('Authorization', `Bearer ${this.accessToken}`);
+      }
+      xhr.upload.onprogress = event => {
+        if (onProgress && event.lengthComputable) {
+          onProgress({
+            loaded: event.loaded,
+            total: event.total,
+            percent: (event.loaded / event.total) * 100,
+          });
+        }
+      };
+      xhr.onload = () => {
+        let body = null;
+        try {
+          body = JSON.parse(xhr.responseText);
+        } catch {
+          body = null;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(body);
+          return;
+        }
+        const detail = Array.isArray(body?.detail)
+          ? body.detail.map(item => item.msg || 'Confira os dados enviados.').join('; ')
+          : body?.detail || body?.message || `Falha no envio (HTTP ${xhr.status})`;
+        reject(new APIError(xhr.status, detail));
+      };
+      xhr.onerror = () => reject(new APIError(0, 'Falha de conexão durante o envio'));
+      xhr.ontimeout = () => reject(new APIError(0, 'Tempo esgotado durante o envio'));
+      xhr.send(formData);
+    });
+  }
 }
 
 class APIError extends Error {

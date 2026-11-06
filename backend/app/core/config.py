@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = True
     environment: str = "development"
+    # Emite o SQL do SQLAlchemy no log. Desligado por padrão para não inflar o log.
+    sql_echo: bool = False
 
     # Server
     host: str = "0.0.0.0"
@@ -47,6 +49,8 @@ class Settings(BaseSettings):
     # File Upload
     max_upload_size_mb: int = 50
     upload_dir: str = "./storage/exams"
+    pdf_dir: str = "./storage/exams/pdfs"
+    qr_dir: str = "./storage/exams/qrcodes"
     material_storage_dir: str = "./storage/materials"
     processed_dir: str = "./storage/processed"
     temp_dir: str = "./storage/temp"
@@ -80,6 +84,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = "./logs/edugrade.log"
+
+    # Relatórios de testes e cobertura
+    reports_dir: str = "./reports"
 
     # Backup
     backup_dir: str = "./storage/backups"

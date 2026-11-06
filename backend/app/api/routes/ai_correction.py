@@ -83,15 +83,42 @@ async def correct_single(
 ):
     """Corrige uma única resposta (para teste)."""
     from backend.app.services.ai_correction_service import AIProviderFactory
+
     provider = AIProviderFactory.get_provider(db=db)
     import json
+    import time
 
-    prompt = request.question_statement + "\n\nResposta: " + request.student_answer
+    prompt = (
+        f"{request.question_statement}\n\n"
+        f"Gabarito: {json.dumps(request.answer_key, ensure_ascii=False)}\n"
+        f"Rubrica: {json.dumps(request.rubric or {}, ensure_ascii=False)}\n"
+        f"Pontuação máxima: {request.max_score}\n"
+        f"Resposta do aluno: {request.student_answer}"
+    )
+    started_at = time.time()
     response_text = await provider.generate_text(
         prompt,
         getattr(provider, "model", settings.ollama_text_model),
     )
-    return CorrectionResponse(**json.loads(response_text))
+    processing_time_ms = int((time.time() - started_at) * 1000)
+
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError:
+        import re
+
+        match = re.search(r"\{.*\}", response_text, re.DOTALL)
+        if match is None:
+            raise HTTPException(
+                status_code=502,
+                detail="O provedor de IA retornou uma resposta que não é JSON.",
+            )
+        payload = json.loads(match.group())
+
+    payload.setdefault("raw_response", {"response": response_text})
+    payload.setdefault("processing_time_ms", processing_time_ms)
+    payload.setdefault("max_score", request.max_score)
+    return CorrectionResponse(**payload)
 
 
 @router.post("/batch-correct", response_model=BatchCorrectionResponse)

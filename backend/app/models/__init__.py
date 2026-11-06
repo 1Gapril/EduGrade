@@ -69,6 +69,12 @@ from backend.app.models.grading_batch import (
     StudentIdentificationResult,
 )
 from backend.app.models.material import StudyMaterial
+from backend.app.models.operation_job import (
+    TERMINAL_STATUSES,
+    OperationJob,
+    OperationKind,
+    OperationStatus,
+)
 from backend.app.models.quality_run import QualityRun
 from backend.app.models.user import (
     Administrator,
@@ -91,6 +97,11 @@ __all__ = [
     "AIProviderConfig",
     "AdminSetting",
     "QualityRun",
+    # Operações de longa duração
+    "OperationJob",
+    "OperationKind",
+    "OperationStatus",
+    "TERMINAL_STATUSES",
     # Academic
     "Course",
     "Subject",

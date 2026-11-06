@@ -256,6 +256,114 @@
       color: var(--color-gray-500);
       font-size: 0.75rem;
     }
+    .workspace-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: var(--space-3);
+      margin-bottom: var(--space-5);
+    }
+    .workspace-summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      padding: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      background: var(--color-gray-50);
+    }
+    .workspace-summary-card strong {
+      color: var(--color-gray-900);
+      font-size: 1.25rem;
+    }
+    .workspace-summary-card span {
+      color: var(--color-gray-500);
+      font-size: 0.8rem;
+    }
+    .workspace-attendance-card {
+      padding: var(--space-4);
+      margin-bottom: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+    }
+    .workspace-week-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-3);
+      margin-bottom: var(--space-6);
+    }
+    .workspace-week-day {
+      padding: var(--space-3);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      background: var(--color-white);
+    }
+    .workspace-week-day h3 {
+      margin-bottom: var(--space-2);
+      color: var(--color-gray-800);
+      font-size: 0.9rem;
+    }
+    .workspace-week-slot {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      padding: var(--space-2);
+      margin-bottom: var(--space-2);
+      border-radius: var(--radius-md);
+      background: var(--color-primary-light);
+      font-size: 0.8rem;
+    }
+    .workspace-week-slot strong {
+      color: var(--color-gray-900);
+    }
+    .workspace-week-slot span {
+      color: var(--color-gray-600);
+    }
+    .workspace-path-cell {
+      font-family: monospace;
+      font-size: 0.75rem;
+      word-break: break-all;
+    }
+    .workspace-import-help {
+      padding: var(--space-4);
+      margin-bottom: var(--space-4);
+      border: 1px solid var(--color-gray-200);
+      border-radius: var(--radius-lg);
+      background: var(--color-gray-50);
+      color: var(--color-gray-700);
+      font-size: 0.85rem;
+    }
+    .workspace-import-help p {
+      margin: 0 0 var(--space-2);
+    }
+    .workspace-import-help code {
+      padding: 2px 6px;
+      border-radius: var(--radius-md);
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      font-size: 0.8rem;
+    }
+    .workspace-import-message {
+      padding: var(--space-3) var(--space-4);
+      margin: var(--space-3) 0;
+      border-radius: var(--radius-md);
+      background: var(--color-success-light);
+      color: var(--color-success);
+      font-weight: 500;
+    }
+    .workspace-import-message.is-error {
+      background: var(--color-danger-light);
+      color: var(--color-danger);
+    }
+    .workspace-command {
+      padding: var(--space-3) var(--space-4);
+      margin: var(--space-3) 0;
+      border-radius: var(--radius-md);
+      background: var(--color-gray-900);
+      color: #e5e7eb;
+      font-size: 0.78rem;
+      overflow-x: auto;
+      white-space: pre;
+    }
   </style>
 </head>
 <body>
@@ -278,6 +386,7 @@
     </section>
   </main>
   <script src="/js/main.js"></script>
+  <script src="/js/progress.js"></script>
   <script src="/js/workspace.js"></script>
 </body>
 </html>
